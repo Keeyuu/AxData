@@ -183,6 +183,120 @@ class AxDataClient:
         self._raise_for_status(response)
         return self._extract_data_object(response.json())
 
+    def snapshots(self, namespace: str | None = None) -> list[dict[str, Any]]:
+        """List completed snapshots, newest first, as stable dicts.
+
+        Local mode calls ``axdata_core.list_snapshots`` directly; API mode
+        calls ``GET /v1/snapshots``. Each entry carries the same fields in
+        both modes: ``namespace``, absolute ``path`` and the full manifest.
+        ``namespace`` restricts the listing to one namespace. Unfinished or
+        corrupted snapshot directories are never listed.
+        """
+
+        if self.mode == "local":
+            try:
+                from axdata_core import list_snapshots
+            except ImportError as exc:
+                raise AxDataError(
+                    "AxData local snapshots require axdata_core. Install the workspace or "
+                    "use API mode with api_base.",
+                    code="CORE_UNAVAILABLE",
+                    status_code=503,
+                ) from exc
+            try:
+                return list_snapshots(namespace=namespace, data_root=self.data_root)
+            except Exception as exc:
+                raise self._translate_snapshot_error(exc) from exc
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        params = {"namespace": namespace} if namespace else None
+        response = self._http_session.get(
+            f"{self.api_base}/v1/snapshots",
+            params=params,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return list(self._extract_records(response.json()))
+
+    def snapshot(self, snapshot_id: str) -> dict[str, Any]:
+        """Resolve one completed snapshot's info as a stable dict.
+
+        Local mode calls ``axdata_core.get_snapshot`` directly; API mode calls
+        ``GET /v1/snapshots/{snapshot_id}``. Both modes return the same
+        fields: ``namespace``, absolute ``path`` and the full manifest.
+
+        Raises :class:`AxDataError` with status 404 when the snapshot does not
+        exist, is unfinished (no ``_SUCCESS``) or corrupted, and status 400 on
+        malformed snapshot ids.
+        """
+
+        if not snapshot_id:
+            raise ValueError("snapshot_id is required")
+        if self.mode == "local":
+            try:
+                from axdata_core import get_snapshot
+            except ImportError as exc:
+                raise AxDataError(
+                    "AxData local snapshots require axdata_core. Install the workspace or "
+                    "use API mode with api_base.",
+                    code="CORE_UNAVAILABLE",
+                    status_code=503,
+                ) from exc
+            try:
+                return get_snapshot(snapshot_id, data_root=self.data_root)
+            except Exception as exc:
+                raise self._translate_snapshot_error(exc) from exc
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        response = self._http_session.get(
+            f"{self.api_base}/v1/snapshots/{quote(str(snapshot_id), safe='')}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return self._extract_data_object(response.json())
+
+    def snapshot_manifest(self, snapshot_id: str) -> dict[str, Any]:
+        """Return the manifest.json content of one completed snapshot.
+
+        Local mode resolves the manifest path through
+        ``axdata_core.resolve_snapshot_manifest`` and reads it from disk; API
+        mode calls ``GET /v1/snapshots/{snapshot_id}/manifest``. Both modes
+        return the manifest JSON exactly as written on disk.
+
+        Raises :class:`AxDataError` with status 404 when the snapshot does not
+        exist, is unfinished (no ``_SUCCESS``) or corrupted, and status 400 on
+        malformed snapshot ids.
+        """
+
+        if not snapshot_id:
+            raise ValueError("snapshot_id is required")
+        if self.mode == "local":
+            try:
+                from axdata_core import resolve_snapshot_manifest
+            except ImportError as exc:
+                raise AxDataError(
+                    "AxData local snapshots require axdata_core. Install the workspace or "
+                    "use API mode with api_base.",
+                    code="CORE_UNAVAILABLE",
+                    status_code=503,
+                ) from exc
+            try:
+                manifest_path = resolve_snapshot_manifest(snapshot_id, data_root=self.data_root)
+                return dict(json.loads(manifest_path.read_text(encoding="utf-8")))
+            except Exception as exc:
+                raise self._translate_snapshot_error(exc) from exc
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        response = self._http_session.get(
+            f"{self.api_base}/v1/snapshots/{quote(str(snapshot_id), safe='')}/manifest",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return self._extract_data_object(response.json())
+
     def query_dataset(
         self,
         dataset_id: str,
@@ -704,6 +818,25 @@ class AxDataClient:
         if isinstance(exc, ImportError):
             return AxDataError(str(exc), code="CORE_UNAVAILABLE", status_code=503)
         return AxDataError(str(exc), code="DATASET_QUERY_ERROR", status_code=500)
+
+    @staticmethod
+    def _translate_snapshot_error(exc: Exception) -> AxDataError:
+        """Map local snapshot core failures to the same client errors API mode raises."""
+
+        try:
+            from axdata_core.snapshots import SnapshotError, SnapshotNotFoundError
+        except ImportError:
+            return AxDataError(str(exc), code="CORE_UNAVAILABLE", status_code=503)
+        if isinstance(exc, SnapshotNotFoundError):
+            return AxDataError(str(exc), code="SNAPSHOT_NOT_FOUND", status_code=404)
+        if isinstance(exc, SnapshotError):
+            message = str(exc)
+            if "incomplete" in message or "corrupted" in message or "escapes" in message:
+                return AxDataError(message, code="SNAPSHOT_NOT_FOUND", status_code=404)
+            return AxDataError(message, code="SNAPSHOT_INVALID_REQUEST", status_code=400)
+        if isinstance(exc, ImportError):
+            return AxDataError(str(exc), code="CORE_UNAVAILABLE", status_code=503)
+        return AxDataError(str(exc), code="SNAPSHOT_ERROR", status_code=500)
 
     def _call_local(
         self,

@@ -42,6 +42,7 @@ from .query_routes import query_core_table, router as query_router  # noqa: E402
 from .data_routes import router as data_router  # noqa: E402
 from .dataset_routes import router as dataset_router  # noqa: E402
 from .serialization import response_payload  # noqa: E402
+from .snapshot_routes import router as snapshot_router  # noqa: E402
 from .source_routes import core_request_interface, router as source_router  # noqa: E402
 from .plugin_routes import router as plugin_router  # noqa: E402
 from .stream_routes import router as stream_router  # noqa: E402
@@ -401,6 +402,7 @@ app.include_router(plugin_router, dependencies=[AuthDependency])
 app.include_router(query_router, dependencies=[AuthDependency])
 app.include_router(data_router, dependencies=[AuthDependency])
 app.include_router(dataset_router, dependencies=[AuthDependency])
+app.include_router(snapshot_router, dependencies=[AuthDependency])
 app.include_router(downloader_router, dependencies=[AuthDependency])
 app.include_router(collector_router, dependencies=[AuthDependency])
 app.include_router(calendar_router, dependencies=[AuthDependency])
