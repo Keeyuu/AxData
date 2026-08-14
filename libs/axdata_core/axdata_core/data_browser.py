@@ -1,30 +1,36 @@
-"""Local dataset discovery and small preview queries."""
+"""Local dataset discovery and small preview queries.
+
+Dataset discovery (identity, paths, columns, primary key, date field) is
+delegated to :mod:`axdata_core.dataset_catalog`; this module only converts
+descriptors into user-facing summaries and enriches them with run quality
+metadata and parquet statistics.
+"""
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from .collector_registry import build_collector_registry
 from .collector_scheduler import CollectorSchedulerStore, collector_scheduler_store_path
-from .schema import Field, TableSchema, get_schema, list_tables
-from .storage import core_table_path, core_table_partition_path
+from .dataset_catalog import (
+    DatasetDescriptor,
+    _declared_formats,
+    _declared_output_paths,
+    list_dataset_descriptors,
+)
+from .schema import Field, TableSchema, get_schema
 
 DEFAULT_PREVIEW_LIMIT = 3
 MAX_PREVIEW_LIMIT = 100
-MAX_DISCOVERY_RUNS = 500
-MAX_DOWNLOADER_LOGS_PER_DIR = 200
 MAX_MISSING_PATHS = 20
 MAX_PARQUET_STATS_FILES = 200
 MAX_PARQUET_STATS_DIRS = 2000
-KNOWN_DATA_LAYERS = frozenset({"raw", "staging", "core", "factor", "snapshot", "snapshots"})
 DATASET_FORMAT_DIRS = frozenset({"parquet", "csv", "duckdb", "jsonl", "logs"})
 _NO_MATCHING_PARQUET_PARTITIONS = object()
 
@@ -153,36 +159,21 @@ def list_datasets(
     data_root: str | Path | None = None,
     include_core: bool = True,
 ) -> list[DatasetSummary]:
-    """Discover local datasets from run metadata and known core parquet paths."""
+    """Discover local datasets through the dynamic dataset catalog."""
 
     root = _resolve_data_root(data_root)
     entries: dict[str, DatasetSummary] = {}
 
-    for summary in _declared_dataset_summaries(root):
-        _merge_summary(entries, summary)
-
-    for run in _load_collector_runs(root):
-        summary = _summary_from_run(root, run)
+    for descriptor in list_dataset_descriptors(data_root=root):
+        if not include_core and descriptor.layer == "core":
+            continue
+        summary = _summary_from_descriptor(descriptor, root=root)
         if summary is None:
             continue
         _merge_summary(entries, summary)
-
-    for log_payload in _iter_downloader_logs(root, entries):
-        summary = _summary_from_log(root, log_payload)
-        if summary is None:
-            continue
-        _merge_summary(entries, summary)
-
-    if include_core:
-        for table in list_tables():
-            summary = _summary_from_core_table(root, table)
-            if summary is not None:
-                _merge_summary(entries, summary)
 
     local_entries = [
-        summary
-        for summary in entries.values()
-        if _has_local_output_reference(summary)
+        summary for summary in entries.values() if _has_local_output_reference(summary)
     ]
     return sorted(
         local_entries,
@@ -478,359 +469,135 @@ def _resolve_data_root(data_root: str | Path | None) -> Path:
     return Path(data_root or os.getenv("AXDATA_DATA_DIR", "data")).expanduser().resolve()
 
 
-def _load_collector_runs(root: Path) -> tuple[Any, ...]:
-    store_path = collector_scheduler_store_path(data_root=root)
-    if not store_path.exists():
-        return ()
-    try:
-        return CollectorSchedulerStore(data_root=root).list_runs(limit=MAX_DISCOVERY_RUNS)
-    except Exception:
-        return ()
-
-
 def _declared_dataset_summaries(root: Path) -> Iterable[DatasetSummary]:
-    try:
-        registry = build_collector_registry(data_root=root)
-    except Exception:
-        return ()
-    summaries: list[DatasetSummary] = []
-    for registration in registry.list_collectors():
-        collector = registration.collector
-        output = dict(collector.output or {})
-        for declaration in _collector_output_declarations(collector, output):
-            dataset = str(declaration.get("dataset_id") or collector.dataset_id or collector.collector_id)
-            layer = _string_or_none(declaration.get("layer") or output.get("layer") or output.get("output_layer"))
-            declared_paths = _declared_output_paths(root, declaration, output)
-            actual_paths = {
-                key: value
-                for key, value in declared_paths.items()
-                if Path(value).exists()
-            }
-            summary = DatasetSummary(
-                dataset=dataset,
-                interface_name=str(declaration.get("table") or declaration.get("logical_table") or dataset),
-                display_name_zh=_string_or_none(declaration.get("display_name_zh")) or collector.display_name_zh,
-                description=str(declaration.get("description") or collector.description or ""),
-                provider=registration.collector_plugin_id,
-                source=_string_or_none(declaration.get("source") or registration.collector_plugin_id),
-                layer=layer,
-                output_paths=actual_paths,
-                columns=_string_list(declaration.get("columns") or declaration.get("default_query_fields")),
-                metadata={
-                    "collector_name": collector.collector_id,
-                    "collector_plugin_id": registration.collector_plugin_id,
-                    "declared_only": True,
-                    "expected_output_paths": declared_paths,
-                },
-                write_mode=_string_or_none(declaration.get("write_mode") or output.get("write_mode")),
-                partition_by=_string_list(declaration.get("partition_by") or output.get("partition_by")),
-                primary_key=_string_list(declaration.get("primary_key") or output.get("primary_key")),
-                date_field=_string_or_none(declaration.get("date_field") or output.get("date_field")),
-            )
-            _apply_dataset_declaration(summary, declaration, root=root)
-            summaries.append(_enrich_summary_from_paths(summary, root=root))
-    return summaries
+    """Declaration-sourced summaries from the dataset catalog (compat hook)."""
+
+    for descriptor in list_dataset_descriptors(data_root=root):
+        declaration = descriptor.declaration or {}
+        if declaration.get("_source") != "collector_registry":
+            continue
+        summary = _summary_from_descriptor(descriptor, root=root)
+        if summary is not None:
+            yield summary
+
+
+def _summary_from_descriptor(descriptor: DatasetDescriptor, *, root: Path) -> DatasetSummary:
+    """Convert one catalog descriptor into a user-facing dataset summary."""
+
+    declaration = dict(descriptor.declaration or {})
+    interface_name = _string_or_none(
+        declaration.get("table")
+        or declaration.get("logical_table")
+        or declaration.get("interface_name")
+    ) or descriptor.dataset_id
+    output_paths: dict[str, str] = {}
+    if descriptor.paths:
+        output_paths[descriptor.format] = str(descriptor.paths[0])
+    metadata: dict[str, Any] = {
+        "source": declaration.get("_source") or "catalog",
+        "source_runs": list(descriptor.source_runs),
+    }
+    if declaration.get("declared_only"):
+        metadata["declared_only"] = True
+    summary = DatasetSummary(
+        dataset=descriptor.dataset_id,
+        interface_name=interface_name,
+        layer=descriptor.layer,
+        output_paths=output_paths,
+        columns=list(descriptor.columns),
+        primary_key=list(descriptor.primary_key),
+        date_field=descriptor.date_field,
+        partition_by=list(descriptor.partition_by),
+        write_mode=descriptor.write_mode,
+        updated_at=descriptor.updated_at,
+        latest_run_id=descriptor.source_runs[0] if descriptor.source_runs else None,
+        metadata=metadata,
+    )
+    _apply_dataset_declaration(summary, declaration, root=root)
+    _enrich_summary_from_payload(summary, declaration)
+    return _enrich_summary_from_paths(summary, root=root)
+
+
+def _enrich_summary_from_payload(summary: DatasetSummary, declaration: Mapping[str, Any]) -> None:
+    """Attach run quality/write metadata carried by the catalog descriptor."""
+
+    payload = declaration.get("_run_metadata")
+    if not isinstance(payload, Mapping):
+        return
+    summary.latest_run_id = summary.latest_run_id or _string_or_none(payload.get("run_id"))
+    summary.latest_run_status = _string_or_none(payload.get("status")) or summary.latest_run_status
+    summary.updated_at = summary.updated_at or _string_or_none(
+        payload.get("finished_at") or payload.get("updated_at")
+    )
+    summary.provider = summary.provider or _string_or_none(
+        payload.get("provider_id") or payload.get("collector_plugin_id")
+    )
+    summary.source = summary.source or _string_or_none(payload.get("source"))
+    if summary.row_count is None:
+        summary.row_count = _int_or_none(payload.get("row_count"))
+    quality = payload.get("quality")
+    if isinstance(quality, Mapping):
+        summary.quality = quality
+        summary.quality_status = summary.quality_status or _string_or_none(
+            quality.get("quality_status")
+        )
+        summary.quality_warnings = _string_list(quality.get("quality_warnings"))
+        summary.quality_errors = _string_list(quality.get("quality_errors"))
+        date_range = quality.get("date_range")
+        if isinstance(date_range, Mapping):
+            if _date_field(summary):
+                summary.date_min = summary.date_min or _string_or_none(date_range.get("min"))
+                summary.date_max = summary.date_max or _string_or_none(date_range.get("max"))
+            else:
+                summary.datetime_min = summary.datetime_min or _string_or_none(
+                    date_range.get("min")
+                )
+                summary.datetime_max = summary.datetime_max or _string_or_none(
+                    date_range.get("max")
+                )
+    write_metadata = payload.get("write_metadata")
+    if isinstance(write_metadata, Mapping):
+        for key, value in write_metadata.items():
+            if key not in (
+                "replace_range_start",
+                "replace_range_end",
+                "rows_before",
+                "rows_written",
+                "rows_after",
+                "duplicate_rows_dropped",
+                "partitions_touched",
+            ):
+                continue
+            if getattr(summary, key, None) is not None:
+                continue
+            if key in ("rows_before", "rows_written", "rows_after", "duplicate_rows_dropped"):
+                setattr(summary, key, _int_or_none(value))
+            elif key == "partitions_touched":
+                setattr(summary, key, _string_list(value))
+            else:
+                setattr(summary, key, _string_or_none(value))
+    metadata = dict(summary.metadata)
+    metadata.update(
+        {
+            key: value
+            for key, value in {
+                "collector_name": payload.get("collector_name"),
+                "task_id": payload.get("task_id"),
+                "downloader_profile": payload.get("downloader_profile"),
+                "params": payload.get("params"),
+                "snapshot_date": payload.get("snapshot_date"),
+                "log_path": payload.get("log_path"),
+            }.items()
+            if value not in (None, "")
+        }
+    )
+    summary.metadata = metadata
 
 
 def _has_local_output_reference(summary: DatasetSummary) -> bool:
     """Return whether a dataset represents local files or stale local metadata."""
 
     return bool(summary.output_paths)
-
-
-def _collector_output_declarations(collector: Any, output: Mapping[str, Any]) -> list[dict[str, Any]]:
-    raw_datasets = output.get("datasets") or output.get("outputs")
-    declarations: list[dict[str, Any]] = []
-    if isinstance(raw_datasets, Sequence) and not isinstance(raw_datasets, (str, bytes, bytearray)):
-        for item in raw_datasets:
-            if isinstance(item, Mapping):
-                declarations.append(dict(item))
-    if declarations:
-        return declarations
-
-    dataset_id = getattr(collector, "dataset_id", None)
-    if not dataset_id:
-        return []
-    return [
-        {
-            "dataset_id": dataset_id,
-            "display_name_zh": getattr(collector, "display_name_zh", None),
-            "description": getattr(collector, "description", ""),
-            "layer": output.get("layer") or output.get("output_layer"),
-            "table": output.get("table") or output.get("logical_table") or dataset_id,
-            "fields": output.get("fields"),
-            "primary_key": output.get("primary_key"),
-            "date_field": output.get("date_field"),
-            "partition_by": output.get("partition_by"),
-            "write_mode": output.get("write_mode"),
-            "storage": output.get("storage"),
-            "formats": output.get("supported_formats") or output.get("formats"),
-        }
-    ]
-
-
-def _declared_output_paths(root: Path, declaration: Mapping[str, Any], output: Mapping[str, Any]) -> dict[str, str]:
-    path_parts = _string_list(
-        declaration.get("default_output_path_parts")
-        or declaration.get("path_parts")
-        or output.get("default_output_path_parts")
-    )
-    if not path_parts:
-        layer = str(declaration.get("layer") or output.get("layer") or output.get("output_layer") or "snapshot")
-        table = str(declaration.get("table") or declaration.get("logical_table") or declaration.get("dataset_id") or "")
-        default_dir_name = str(
-            declaration.get("default_dir_name")
-            or output.get("default_dir_name")
-            or declaration.get("dataset_id")
-            or table
-        )
-        path_parts = [layer, f"table={table}" if layer == "core" and table and "." not in table else default_dir_name]
-    base = root.joinpath(*path_parts)
-    formats = _declared_formats(declaration, output)
-    return {format_name: str(base / format_name) for format_name in formats}
-
-
-def _output_dataset_declaration(
-    payload: Mapping[str, Any],
-    *,
-    interface_name: str,
-    layer: str | None,
-) -> dict[str, Any]:
-    output = payload.get("output")
-    if not isinstance(output, Mapping):
-        output = {}
-    raw_datasets = output.get("datasets") or output.get("outputs")
-    if isinstance(raw_datasets, Sequence) and not isinstance(raw_datasets, (str, bytes, bytearray)):
-        target_names = {
-            _normalize_dataset_name(interface_name),
-            _normalize_dataset_name(str(payload.get("dataset_id") or "")),
-            _normalize_dataset_name(str(payload.get("table") or "")),
-        }
-        target_names.discard("")
-        for item in raw_datasets:
-            if not isinstance(item, Mapping):
-                continue
-            declaration = dict(item)
-            names = {
-                _normalize_dataset_name(str(declaration.get("dataset_id") or "")),
-                _normalize_dataset_name(str(declaration.get("table") or "")),
-                _normalize_dataset_name(str(declaration.get("logical_table") or "")),
-            }
-            names.discard("")
-            if target_names & names:
-                return declaration
-        for item in raw_datasets:
-            if isinstance(item, Mapping):
-                return dict(item)
-    dataset_id = payload.get("dataset_id")
-    if dataset_id:
-        return {
-            "dataset_id": dataset_id,
-            "table": payload.get("table") or output.get("table") or dataset_id,
-            "layer": layer or output.get("layer") or output.get("output_layer"),
-            "fields": output.get("fields"),
-            "primary_key": output.get("primary_key"),
-            "date_field": output.get("date_field"),
-            "partition_by": output.get("partition_by"),
-            "write_mode": output.get("write_mode"),
-            "storage": output.get("storage"),
-            "formats": output.get("supported_formats") or output.get("formats"),
-        }
-    return {}
-
-
-def _summary_from_run(root: Path, run: Any) -> DatasetSummary | None:
-    output_paths = {str(key): str(value) for key, value in dict(getattr(run, "output_paths", {}) or {}).items()}
-    result = dict(getattr(run, "result", {}) or {})
-    download_result = dict(result.get("download_result") or {})
-    if not output_paths:
-        raw_output_paths = download_result.get("output_paths")
-        if isinstance(raw_output_paths, Mapping):
-            output_paths = {str(key): str(value) for key, value in raw_output_paths.items()}
-    if not output_paths:
-        return None
-
-    interface_name = str(
-        result.get("target_interface")
-        or download_result.get("interface_name")
-        or getattr(run, "downloader_profile", None)
-        or getattr(run, "collector_name", "")
-    )
-    quality = dict(getattr(run, "quality", {}) or download_result.get("quality") or {})
-    source_meta = dict(download_result.get("source_meta") or {})
-    write_metadata = _write_metadata_from_payload(download_result, quality)
-    layer = _layer_from_payload(download_result, result, output_paths)
-    declaration_payload = dict(download_result)
-    if "output" not in declaration_payload and isinstance(result.get("output"), Mapping):
-        declaration_payload["output"] = result["output"]
-    declared = _output_dataset_declaration(declaration_payload, interface_name=interface_name, layer=layer)
-    summary = DatasetSummary(
-        dataset=str(declared.get("dataset_id") or _dataset_id(interface_name, layer)),
-        interface_name=interface_name,
-        display_name_zh=_string_or_none(declared.get("display_name_zh")),
-        description=str(declared.get("description") or ""),
-        provider=getattr(run, "provider_id", None),
-        source=_source_from_payload(getattr(run, "provider_id", None), source_meta),
-        layer=_string_or_none(declared.get("layer")) or layer,
-        output_paths=output_paths,
-        row_count=_int_or_none(download_result.get("row_count") or quality.get("row_count_value")),
-        quality=quality,
-        quality_status=_string_or_none(quality.get("quality_status")),
-        quality_warnings=_string_list(quality.get("quality_warnings")),
-        quality_errors=_string_list(quality.get("quality_errors")),
-        latest_run_id=getattr(run, "run_id", None),
-        latest_run_status=getattr(run, "status", None),
-        updated_at=getattr(run, "finished_at", None) or getattr(run, "updated_at", None),
-        metadata={
-            "collector_name": getattr(run, "collector_name", None),
-            "task_id": getattr(run, "task_id", None),
-            "downloader_profile": getattr(run, "downloader_profile", None),
-            "params": dict(getattr(run, "params", {}) or {}),
-            "snapshot_date": download_result.get("snapshot_date"),
-            "log_path": download_result.get("log_path"),
-            "collector_output_dataset": dict(declared),
-        },
-        **write_metadata,
-    )
-    _apply_dataset_declaration(summary, declared, root=root)
-    return _enrich_summary_from_paths(summary, root=root)
-
-
-def _iter_downloader_logs(root: Path, entries: Mapping[str, DatasetSummary]) -> Iterable[dict[str, Any]]:
-    seen: set[Path] = set()
-    for log_dir in _known_log_dirs(root):
-        yield from _iter_log_dir(log_dir, seen)
-    for summary in entries.values():
-        for path_text in summary.output_paths.values():
-            path = Path(path_text).expanduser()
-            candidates = []
-            if path.is_file():
-                candidates.append(path.parent.parent / "logs")
-            elif path.is_dir():
-                candidates.append(path / "logs")
-                candidates.append(path.parent / "logs")
-            for log_dir in candidates:
-                yield from _iter_log_dir(log_dir, seen)
-
-
-def _known_log_dirs(root: Path) -> Iterable[Path]:
-    """Yield metadata log directories under known AxData data roots only."""
-
-    candidates = [
-        root / "raw",
-        root / "staging",
-        root / "core",
-        root / "factor",
-        root / "snapshot",
-        root / "snapshots",
-    ]
-    for candidate in candidates:
-        if not candidate.exists():
-            continue
-        yield from candidate.glob("*/logs")
-        yield from candidate.glob("*/*/logs")
-        yield from candidate.glob("*/*/*/logs")
-
-
-def _iter_log_dir(log_dir: Path, seen: set[Path]) -> Iterable[dict[str, Any]]:
-    try:
-        resolved = log_dir.resolve()
-    except OSError:
-        return
-    if resolved in seen or not resolved.exists():
-        return
-    seen.add(resolved)
-    log_paths = sorted(
-        resolved.glob("*.json"),
-        key=lambda path: _path_sort_mtime(path),
-        reverse=True,
-    )[:MAX_DOWNLOADER_LOGS_PER_DIR]
-    for log_path in log_paths:
-        try:
-            payload = json.loads(log_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(payload, dict):
-            payload.setdefault("log_path", str(log_path))
-            yield payload
-
-
-def _summary_from_log(root: Path, payload: Mapping[str, Any]) -> DatasetSummary | None:
-    output_paths = payload.get("output_paths")
-    if not isinstance(output_paths, Mapping):
-        return None
-    interface_name = str(payload.get("interface_name") or payload.get("target_interface") or "")
-    if not interface_name:
-        return None
-    quality = dict(payload.get("quality") or {})
-    layer = _layer_from_payload(payload, {}, output_paths)
-    source_meta = dict(payload.get("source_meta") or {})
-    write_metadata = _write_metadata_from_payload(payload, quality)
-    declared = _output_dataset_declaration(payload, interface_name=interface_name, layer=layer)
-    summary = DatasetSummary(
-        dataset=str(declared.get("dataset_id") or _dataset_id(interface_name, layer)),
-        interface_name=interface_name,
-        display_name_zh=_string_or_none(declared.get("display_name_zh")),
-        description=str(declared.get("description") or ""),
-        provider=_string_or_none(payload.get("provider_id")),
-        source=_source_from_payload(payload.get("provider_id"), source_meta),
-        layer=_string_or_none(declared.get("layer")) or layer,
-        output_paths={str(key): str(value) for key, value in output_paths.items()},
-        row_count=_int_or_none(payload.get("row_count") or quality.get("row_count_value")),
-        quality=quality,
-        quality_status=_string_or_none(quality.get("quality_status")),
-        quality_warnings=_string_list(quality.get("quality_warnings")),
-        quality_errors=_string_list(quality.get("quality_errors")),
-        latest_run_id=_string_or_none(payload.get("job_id")),
-        latest_run_status=_string_or_none(payload.get("status")),
-        updated_at=_string_or_none(payload.get("finished_at")),
-        metadata={
-            "snapshot_date": payload.get("snapshot_date"),
-            "log_path": payload.get("log_path"),
-            "params": dict(payload.get("params") or {}) if isinstance(payload.get("params"), Mapping) else {},
-            "collector_output_dataset": dict(declared),
-        },
-        **write_metadata,
-    )
-    _apply_dataset_declaration(summary, declared, root=root)
-    return _enrich_summary_from_paths(summary, root=root)
-
-
-def _summary_from_core_table(root: Path, table: str) -> DatasetSummary | None:
-    output_paths: dict[str, str] = {}
-    file_path = core_table_path(table, root)
-    partition_path = core_table_partition_path(table, root)
-    if file_path.exists():
-        output_paths["parquet"] = str(file_path)
-    elif partition_path.exists() and _parquet_dir_may_have_files(partition_path):
-        output_paths["parquet"] = str(partition_path)
-    else:
-        return None
-
-    schema = get_schema(table)
-    summary = DatasetSummary(
-        dataset=_dataset_id(table, "core"),
-        interface_name=table,
-        display_name_zh=schema.display_name_zh,
-        description=schema.description,
-        layer="core",
-        output_paths=output_paths,
-        columns=list(schema.field_names),
-        field_schema=_field_schema_from_table_schema(schema),
-        logical_table=schema.name,
-        storage_layout="core_table",
-        default_query_fields=list(schema.field_names),
-        default_filter_fields=_default_filter_fields(schema),
-        available_formats=["parquet", "csv", "duckdb"],
-        metadata={
-            "schema": schema.name,
-            "primary_key": list(schema.primary_key),
-            "date_field": schema.date_field,
-        },
-        primary_key=list(schema.primary_key),
-        date_field=schema.date_field,
-    )
-    return _enrich_summary_from_paths(summary, root=root)
 
 
 def _merge_summary(entries: dict[str, DatasetSummary], summary: DatasetSummary) -> None:
@@ -1027,25 +794,6 @@ def _default_filter_fields(schema: TableSchema) -> list[str]:
     if schema.date_field:
         fields.extend(["start_date", "end_date"])
     return fields
-
-
-def _declared_formats(
-    declaration: Mapping[str, Any],
-    output: Mapping[str, Any],
-) -> list[str]:
-    values = _string_list(
-        declaration.get("formats")
-        or declaration.get("supported_formats")
-        or output.get("supported_formats")
-        or output.get("formats")
-        or ["parquet"]
-    )
-    ordered = []
-    for value in values:
-        clean = value.strip().lower()
-        if clean and clean not in ordered:
-            ordered.append(clean)
-    return ordered or ["parquet"]
 
 
 def _enrich_summary_from_paths(summary: DatasetSummary, *, root: Path) -> DatasetSummary:
@@ -1550,84 +1298,6 @@ def _date_filter_payload(start: str | None, end: str | None) -> dict[str, Any]:
     if end:
         payload["end"] = end
     return payload
-
-
-def _layer_from_payload(
-    primary: Mapping[str, Any],
-    secondary: Mapping[str, Any],
-    output_paths: Mapping[str, Any],
-) -> str | None:
-    for payload in (primary, secondary):
-        output = payload.get("output")
-        if isinstance(output, Mapping):
-            layer = _string_or_none(output.get("layer") or output.get("output_layer"))
-            if layer:
-                return layer
-        for key in ("layer", "output_layer"):
-            layer = _string_or_none(payload.get(key))
-            if layer:
-                return layer
-    joined = " ".join(str(path).replace("\\", "/") for path in output_paths.values())
-    for layer in KNOWN_DATA_LAYERS:
-        if f"/{layer}/" in joined or f"\\{layer}\\" in joined or f"{layer}/table=" in joined:
-            return layer
-    return "snapshot"
-
-
-def _write_metadata_from_payload(primary: Mapping[str, Any], quality: Mapping[str, Any]) -> dict[str, Any]:
-    nested = primary.get("write_metadata")
-    source = dict(nested) if isinstance(nested, Mapping) else primary
-    primary_key = _string_list(
-        source.get("primary_key")
-        if "primary_key" in source
-        else quality.get("write_primary_key")
-    )
-    partition_by = _string_list(source.get("partition_by") or quality.get("partition_by"))
-    date_field = _string_or_none(
-        source.get("date_field")
-        or quality.get("write_date_field")
-        or quality.get("date_field")
-    )
-    return {
-        "write_mode": _string_or_none(source.get("write_mode") or quality.get("write_mode")),
-        "partition_by": partition_by,
-        "primary_key": primary_key,
-        "date_field": date_field,
-        "replace_range_start": _string_or_none(
-            source.get("replace_range_start") or quality.get("replace_range_start")
-        ),
-        "replace_range_end": _string_or_none(
-            source.get("replace_range_end") or quality.get("replace_range_end")
-        ),
-        "rows_before": _int_or_none(source.get("rows_before") if "rows_before" in source else quality.get("rows_before")),
-        "rows_written": _int_or_none(
-            source.get("rows_written") if "rows_written" in source else quality.get("rows_written")
-        ),
-        "rows_after": _int_or_none(source.get("rows_after") if "rows_after" in source else quality.get("rows_after")),
-        "duplicate_rows_dropped": _int_or_none(
-            source.get("duplicate_rows_dropped")
-            if "duplicate_rows_dropped" in source
-            else quality.get("duplicate_rows_dropped")
-        ),
-        "partitions_touched": _string_list(source.get("partitions_touched") or quality.get("partitions_touched")),
-    }
-
-
-def _dataset_id(interface_name: str, layer: str | None) -> str:
-    clean = interface_name.strip() or "dataset"
-    if layer and layer not in {"snapshot", "core"}:
-        return f"{layer}.{clean}"
-    return clean
-
-
-def _source_from_payload(provider: Any, source_meta: Mapping[str, Any]) -> str | None:
-    source = _string_or_none(source_meta.get("source") or source_meta.get("source_code"))
-    if source:
-        return source
-    provider_text = _string_or_none(provider)
-    if provider_text and "." in provider_text:
-        return provider_text.rsplit(".", 1)[-1]
-    return provider_text
 
 
 def _normalize_dataset_name(value: str) -> str:
