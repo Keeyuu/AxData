@@ -19,6 +19,7 @@ import { InfoPageView, RuntimePanel, StatusIcon, serviceLabel } from "./componen
 import { MarkdownDocument } from "./components/MarkdownDocument";
 import { DataBrowserPage } from "./pages/DataBrowserPage";
 import { DataInterfacesPage } from "./pages/DataInterfacesPage";
+import { SnapshotsPage } from "./pages/SnapshotsPage";
 import { DiagnosticsPage, PluginManagementPage, SettingsPage, ToolsPage } from "./pages/ToolsPage";
 import axdataDevelopmentStandardsMarkdown from "../../../docs/axdata-development-standards.md?raw";
 import axpPackagingGuideMarkdown from "../../../docs/axp-packaging-guide.md?raw";
@@ -50,7 +51,7 @@ import {
 
 function App() {
   const initialCollectorRoute = readInitialCollectorRoute();
-  const [activeSection, setActiveSection] = useState<ActiveSection>(initialCollectorRoute ? "tools" : "manual");
+  const [activeSection, setActiveSection] = useState<ActiveSection>(initialCollectorRoute?.section ?? "manual");
   const [activeManualId, setActiveManualId] = useState("quickstart");
   const [activeId, setActiveId] = useState(initialCollectorRoute?.collectorId ?? "stock_codes_tdx");
   const [activeSettingId, setActiveSettingId] = useState("access");
@@ -604,6 +605,9 @@ function App() {
           {activeSection === "data" ? (
             <DataBrowserPage apiBase={apiBase} onOpenCollector={() => selectSection("tools")} />
           ) : null}
+          {activeSection === "snapshots" ? (
+            <SnapshotsPage apiBase={apiBase} onOpenDataBrowser={() => selectSection("data")} />
+          ) : null}
           {activeSection === "tools" ? (
             <ToolsPage
               activeCollector={activeToolsDoc}
@@ -774,7 +778,7 @@ type SearchSuggestion = {
   score: number;
 };
 
-function readInitialCollectorRoute() {
+function readInitialCollectorRoute(): { section: "tools" | "snapshots"; pluginId: string; collectorId: string } | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -782,12 +786,15 @@ function readInitialCollectorRoute() {
   const hashText = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
   const hashParams = new URLSearchParams(hashText.startsWith("?") ? hashText.slice(1) : hashText);
   const section = params.get("section") || hashParams.get("section");
+  if (section === "snapshots") {
+    return { section: "snapshots", pluginId: "", collectorId: "" };
+  }
   const pluginId = params.get("plugin") || hashParams.get("plugin") || "";
   const collectorId = params.get("collector") || hashParams.get("collector") || "";
   if (section !== "tools" && !pluginId && !collectorId) {
     return null;
   }
-  return { pluginId, collectorId };
+  return { section: "tools", pluginId, collectorId };
 }
 
 function syncCollectorRoute(pluginId: string, collectorItemId: string) {

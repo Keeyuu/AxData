@@ -1,5 +1,6 @@
 import {
   Activity,
+  Archive,
   BookOpen,
   Code2,
   Database,
@@ -176,6 +177,7 @@ export const sectionNav: Array<{ id: ActiveSection; title: string; icon: LucideI
   { id: "manual", title: "开始", icon: BookOpen },
   { id: "interfaces", title: "接口", icon: Code2 },
   { id: "data", title: "数据", icon: Database },
+  { id: "snapshots", title: "快照", icon: Archive },
   { id: "tools", title: "采集", icon: Download },
   { id: "plugins", title: "插件", icon: Plug },
   { id: "diagnostics", title: "诊断", icon: Stethoscope },
@@ -186,6 +188,7 @@ export const sectionMeta: Record<ActiveSection, { title: string; icon: LucideIco
   manual: { title: "开始", icon: BookOpen },
   interfaces: { title: "接口", icon: Code2 },
   data: { title: "数据", icon: Database },
+  snapshots: { title: "快照", icon: Archive },
   tools: { title: "采集", icon: Download },
   plugins: { title: "插件", icon: Plug },
   diagnostics: { title: "诊断", icon: Stethoscope },

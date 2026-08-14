@@ -412,6 +412,7 @@ export type ActiveSection =
   | "manual"
   | "interfaces"
   | "data"
+  | "snapshots"
   | "tools"
   | "plugins"
   | "diagnostics"

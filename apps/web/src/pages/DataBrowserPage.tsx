@@ -95,6 +95,18 @@ for (const item of catalogItems) {
   CATALOG_LABELS.set(item.name, item.title);
 }
 
+const SNAPSHOT_CATALOG_DATASET_ID = "skynet.research.snapshots";
+
+/** Snapshot catalog dataset (skynet.research.snapshot collector output). */
+function isSnapshotCatalogDataset(dataset: DatasetSummary) {
+  return (
+    dataset.dataset === SNAPSHOT_CATALOG_DATASET_ID ||
+    dataset.interface_name === SNAPSHOT_CATALOG_DATASET_ID ||
+    dataset.write_mode === "snapshot" ||
+    dataset.layer === "snapshot"
+  );
+}
+
 export function DataBrowserPage({
   apiBase,
   onOpenCollector
@@ -370,6 +382,7 @@ export function DataBrowserPage({
                 >
                   <strong>{datasetDisplayName(dataset)}</strong>
                   <small>{dataset.logical_table || dataset.dataset}</small>
+                  {isSnapshotCatalogDataset(dataset) ? <span className="snapshot-catalog-badge">research_snapshot</span> : null}
                   <span>{dataset.layer || "数据表"} · {formatRows(dataset.row_count) || "未采集"}</span>
                   <em className={qualityClass(dataset.quality_status)}>{formatQuality(dataset.quality_status)}</em>
                 </button>
@@ -391,6 +404,7 @@ export function DataBrowserPage({
                   <Table2 size={20} />
                   <h2>{datasetDisplayName(activeDataset)}</h2>
                   <code className="dataset-title-id">{activeDataset.dataset}</code>
+                  {isSnapshotCatalogDataset(activeDataset) ? <span className="snapshot-catalog-badge">research_snapshot</span> : null}
                   <span className={qualityBadgeClass(activeDataset.quality_status)}>{formatQuality(activeDataset.quality_status)}</span>
                   <button
                     className="ghost-action compact danger dataset-delete-action"
@@ -520,6 +534,10 @@ function datasetFacts(dataset: DatasetSummary): TableRow[] {
     ["逻辑表", dataset.logical_table || dataset.dataset, "用户查询时面对的数据表名"],
     ["来源", dataset.provider || dataset.source || "", "贡献这张表的采集器或数据源插件"],
     ["层级", dataset.layer || "", "raw / staging / core / factor / snapshot"],
+    ["声明主键", formatList(dataset.primary_key), "采集器声明的 primary_key（若声明了）"],
+    ["声明日期字段", dataset.date_field || "", "采集器声明的 date_field（若声明了）"],
+    ["分区列", formatList(dataset.partition_by), "采集器声明的 partition_by（若声明了）"],
+    ["写入方式", dataset.write_mode || "", "采集器声明的 write_mode（若声明了）"],
     ["已保存格式", datasetFormatLabel([dataset]), "当前本地已经落盘的格式；Parquet 是主数据"],
     ["支持格式", formatList(dataset.available_formats), "Parquet 主数据，CSV 导出，DuckDB 查询缓存"],
     ["预计路径", formatExpectedPaths(dataset), "声明里的默认输出目录；未采集时也可以看到"],
