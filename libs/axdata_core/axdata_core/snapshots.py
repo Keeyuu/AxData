@@ -395,7 +395,7 @@ def _asset_ref(file_path: Path, snapshot_root: Path) -> dict[str, Any]:
 
     parquet_file = pq.ParquetFile(file_path)
     try:
-        schema = parquet_file.schema_arrow.remove_metadata()
+        schema = parquet_file.schema_arrow
         row_count = parquet_file.metadata.num_rows
     finally:
         parquet_file.close()
@@ -404,7 +404,7 @@ def _asset_ref(file_path: Path, snapshot_root: Path) -> dict[str, Any]:
         "sha256": _sha256_file(file_path),
         "size_bytes": file_path.stat().st_size,
         "row_count": row_count,
-        "schema_hash": _sha256(_schema_canonical_json(schema)),
+        "schema_hash": _schema_hash(schema),
     }
 
 
@@ -435,12 +435,32 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _schema_canonical_json(schema: Any) -> str:
+def _schema_hash(schema: Any) -> str:
+    """SHA-256 of the schema's canonical JSON (05 §4, Skynet reader contract).
+
+    Canonical form: the ordered field list with name / type string / nullable
+    and per-field metadata; file-level key-value metadata (e.g. pandas' blob)
+    is not part of any field, so it never enters the digest. Must stay
+    byte-identical to ``skynet.adapters.manifest._schema_hash`` — the reader
+    recomputes it from the published file and rejects mismatches.
+    """
     fields = [
-        {"name": field.name, "type": str(field.type), "nullable": field.nullable}
+        {
+            "name": field.name,
+            "type": str(field.type),
+            "nullable": field.nullable,
+            "metadata": (
+                {
+                    key.decode("utf-8", "replace"): value.decode("utf-8", "replace")
+                    for key, value in field.metadata.items()
+                }
+                if field.metadata
+                else {}
+            ),
+        }
         for field in schema
     ]
-    return json.dumps({"fields": fields}, sort_keys=True, separators=(",", ":"))
+    return _sha256(json.dumps(fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
 
 
 def _compute_content_hash(
@@ -449,15 +469,35 @@ def _compute_content_hash(
     calendar_version: str,
     limitations: Sequence[str],
 ) -> str:
+    """Root content hash over the manifest payload (05 §4).
+
+    Assets are keyed ``relative_uri`` in the hash payload (the manifest wire
+    format keeps ``uri``) and the canonical JSON follows the repo convention
+    (``sort_keys``, compact separators, ``ensure_ascii=False``) — both sides
+    of the contract are pinned by docs/plan/axdata-integration/05 §4 and
+    recomputed by the Skynet v2 reader on load.
+    """
     payload = {
         "manifest_version": _MANIFEST_VERSION,
-        "tables": table_refs,
+        "tables": {
+            logical_name: [
+                {
+                    "relative_uri": asset["uri"],
+                    "sha256": asset["sha256"],
+                    "size_bytes": asset["size_bytes"],
+                    "row_count": asset["row_count"],
+                    "schema_hash": asset["schema_hash"],
+                }
+                for asset in assets
+            ]
+            for logical_name, assets in table_refs.items()
+        },
         "source_datasets": [dict(entry) for entry in source_datasets],
         "calendar_version": calendar_version,
         "limitations": list(limitations),
     }
     try:
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     except TypeError as exc:
         raise SnapshotError(f"Snapshot metadata is not JSON-serializable: {exc}") from exc
     return _sha256(canonical)
