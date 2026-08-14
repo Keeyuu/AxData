@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axdata-integration-qlib"
+version = "0.1.0"
+description = "AxData to Qlib materialized provider exporter (AXI-060)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    { name = "AxData" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "axdata-core>=0.1.0",
+    "pandas>=1.5",
+    "pyarrow>=16.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pyqlib==0.9.7",
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.entry-points."axdata.tools"]
+qlib_export = "axdata_qlib.plugin:qlib_export_tool"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["axdata_qlib*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-m 'not framework'"
+markers = [
+    "framework: requires an external framework (pyqlib) to be installed",
+]
