@@ -403,6 +403,28 @@ def test_manifest_v2_fields(tmp_path):
     assert (Path(info["path"]) / ref["uri"]).is_file()
 
 
+def test_qlib_provider_uri_recorded_and_validated(tmp_path):
+    def _create(root: Path, **overrides) -> dict:
+        return _manifest(create_snapshot(**_snapshot_kwargs(root, **overrides))["path"])
+
+    # Default: recorded as None.
+    plain = _create(tmp_path / "plain")
+    assert plain["qlib_provider_uri"] is None
+
+    # A relative path is recorded verbatim in the manifest, and the hash
+    # payload is untouched by it (05 §4: qlib_provider_uri is not hashed), so
+    # the two snapshots share one content hash across data roots.
+    with_qlib = _create(tmp_path / "with_qlib", qlib_provider_uri="qlib")
+    assert with_qlib["qlib_provider_uri"] == "qlib"
+    assert with_qlib["content_hash"] == plain["content_hash"]
+
+    for index, bad in enumerate(("", "  ", "https://host/qlib", "/abs/qlib", "a/../qlib")):
+        with pytest.raises(SnapshotError):
+            create_snapshot(
+                **_snapshot_kwargs(tmp_path / f"bad_{index}", qlib_provider_uri=bad)
+            )
+
+
 def test_quality_and_extra_artifacts_written(tmp_path):
     artifact = tmp_path / "notes.txt"
     artifact.write_text("research note", encoding="utf-8")

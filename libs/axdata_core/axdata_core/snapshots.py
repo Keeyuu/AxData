@@ -132,6 +132,7 @@ def create_snapshot(
     quality: Mapping[str, Any],
     limitations: Sequence[str] = (),
     extra_artifacts: Sequence[Path] = (),
+    qlib_provider_uri: str | None = None,
 ) -> dict[str, Any]:
     """Freeze a bundle of tables into one immutable, content-addressed snapshot.
 
@@ -139,6 +140,13 @@ def create_snapshot(
     <namespace>/``, computes hashes and the manifest there, then atomically
     renames the directory to its final name ``snp_<content_hash[:24]>`` (with
     ``_SUCCESS`` already inside, see the module docstring).
+
+    ``qlib_provider_uri`` is the path of an exported Qlib provider directory
+    **relative to the snapshot root** (plan 05 §2 / 06 §5), recorded verbatim
+    in the manifest so a consumer can default to it; ``None`` records "no
+    bundled qlib provider". It is deliberately excluded from the content hash
+    (plan 05 §4). The caller owns the semantic — this core only records the
+    value and refuses values that could escape the snapshot root.
 
     Idempotency: when a completed snapshot with the same id already exists and
     its manifest content hash matches, the existing snapshot is returned
@@ -158,6 +166,7 @@ def create_snapshot(
     limitations = [str(item) for item in limitations]
     quality = _require_mapping(quality, "quality")
     artifacts = _normalize_extra_artifacts(extra_artifacts)
+    qlib_uri = _normalize_qlib_provider_uri(qlib_provider_uri)
 
     snapshots_root = root / "snapshots"
     namespace_dir = snapshots_root / namespace
@@ -187,7 +196,7 @@ def create_snapshot(
             "tables": table_refs,
             "source_datasets": source_entries,
             "source_runs": [],
-            "qlib_provider_uri": None,
+            "qlib_provider_uri": qlib_uri,
             "quality_uri": _QUALITY_FILE_NAME,
             "limitations": limitations,
         }
@@ -622,6 +631,31 @@ def _normalize_extra_artifacts(
             raise SnapshotError(f"Duplicate extra artifact name: {name!r}")
         entries.append((name, path))
     return entries
+
+
+def _normalize_qlib_provider_uri(value: str | None) -> str | None:
+    """A snapshot-root-relative provider path, or ``None``.
+
+    Absolute values, URI schemes and ``..`` escapes are refused: the value is
+    recorded verbatim in the manifest and consumers resolve it against the
+    snapshot root, so it must never be able to point outside it.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise SnapshotError("qlib_provider_uri must be None or a non-empty relative path.")
+    text = value.strip()
+    if _URI_SCHEME_PATTERN.match(text):
+        raise SnapshotError(f"Refusing qlib_provider_uri with URI scheme: {text!r}")
+    path = Path(text)
+    # ``Path.is_absolute()`` is False for ``/abs`` on Windows (no drive), so
+    # a leading separator is checked explicitly — a snapshot-relative uri may
+    # never start at a filesystem root.
+    if path.is_absolute() or text.startswith(("/", "\\")) or ".." in path.parts:
+        raise SnapshotError(
+            f"Refusing qlib_provider_uri outside the snapshot root: {text!r}"
+        )
+    return text
 
 
 def _inside_root(path: Path, root: Path) -> bool:
