@@ -545,3 +545,35 @@ def test_query_dataset_rejects_fields_declared_but_missing_from_files(tmp_path) 
         fields=["date", "track_id", "strength"],
     )
     assert len(core_columns) == 1
+
+
+def test_query_dataset_end_date_includes_final_day_for_datetime64_column(tmp_path) -> None:
+    """datetime64[ns] date columns must not lose the end_date day.
+
+    Casting a timestamp to VARCHAR appends " 00:00:00"; without taking
+    the date part the same-day end bound compares greater and silently
+    drops the final row (defect found by the AXI-060 exporter).
+    """
+
+    data_root = tmp_path / "data"
+    parquet_dir = data_root / "factor" / "dataset=demo.track_strength" / "parquet"
+    parquet_dir.mkdir(parents=True)
+    frame = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-01-02", "2026-01-05", "2026-01-09"]),
+            "track_id": ["AI", "AI", "AI"],
+            "strength": [1.0, 2.0, 3.0],
+            "source": ["demo", "demo", "demo"],
+        }
+    )
+    frame.to_parquet(parquet_dir / "part-0.parquet", engine="pyarrow", index=False)
+    _write_demo_declaration_log(data_root)
+
+    result = query_dataset(
+        "demo.track_strength",
+        data_root=data_root,
+        start_date="2026-01-01",
+        end_date="2026-01-09",
+    )
+    assert len(result) == 3, "end_date bound must include the final datetime64 day"
+    assert str(result["date"].iloc[-1]).startswith("2026-01-09")

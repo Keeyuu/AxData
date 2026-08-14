@@ -311,11 +311,16 @@ def _build_where_clause(
 
     if date_field and (start or end):
         quoted_date = _quote_identifier(date_field)
+        # SUBSTR(..., 1, 10) keeps only the date part: casting a
+        # datetime64[ns] column to VARCHAR appends " 00:00:00", which
+        # otherwise compares greater than the same-day end bound and
+        # silently drops the final day (found by AXI-060).
+        date_text = f"REPLACE(SUBSTR(CAST({quoted_date} AS VARCHAR), 1, 10), '-', '')"
         if start:
-            clauses.append(f"REPLACE(CAST({quoted_date} AS VARCHAR), '-', '') >= ?")
+            clauses.append(f"{date_text} >= ?")
             params.append(start)
         if end:
-            clauses.append(f"REPLACE(CAST({quoted_date} AS VARCHAR), '-', '') <= ?")
+            clauses.append(f"{date_text} <= ?")
             params.append(end)
 
     if not clauses:
