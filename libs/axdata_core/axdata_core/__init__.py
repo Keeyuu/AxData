@@ -119,6 +119,8 @@ _EXPORT_MODULES: dict[str, str] = {
     "DatasetNotFoundError": ".dataset_catalog",
     "get_dataset_descriptor": ".dataset_catalog",
     "list_dataset_descriptors": ".dataset_catalog",
+    "DatasetQueryError": ".dataset_query",
+    "query_dataset": ".dataset_query",
     "DefaultRequestPlanner": ".downloader_engine",
     "DownloadMetadataWriter": ".downloader_engine",
     "DownloadQualityChecker": ".downloader_engine",

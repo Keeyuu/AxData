@@ -24,6 +24,7 @@ from .dataset_catalog import (
     _declared_output_paths,
     list_dataset_descriptors,
 )
+from .dataset_query import query_dataset
 from .schema import Field, TableSchema, get_schema
 
 DEFAULT_PREVIEW_LIMIT = 3
@@ -32,7 +33,6 @@ MAX_MISSING_PATHS = 20
 MAX_PARQUET_STATS_FILES = 200
 MAX_PARQUET_STATS_DIRS = 2000
 DATASET_FORMAT_DIRS = frozenset({"parquet", "csv", "duckdb", "jsonl", "logs"})
-_NO_MATCHING_PARQUET_PARTITIONS = object()
 
 
 class DataBrowserError(ValueError):
@@ -236,16 +236,17 @@ def preview_dataset(
     start_date = _normalize_date_text(start)
     end_date = _normalize_date_text(end)
     selected_fields = _normalize_fields(fields)
-    rows, columns = _query_parquet(
-        parquet_paths,
+    frame = query_dataset(
+        summary.dataset,
+        data_root=data_root,
         fields=selected_fields,
         filters=query_filters,
-        date_field=_date_field(summary),
-        start=start_date,
-        end=end_date,
+        start_date=start_date,
+        end_date=end_date,
         limit=normalized_limit,
-        known_columns=summary.columns,
     )
+    rows = frame.to_dict(orient="records")
+    columns = list(frame.columns)
     return DataPreview(
         dataset=summary,
         rows=rows,
@@ -1038,178 +1039,6 @@ def _stat_value_text(value: Any) -> str | None:
     return str(value)
 
 
-def _query_parquet(
-    paths: Sequence[Path],
-    *,
-    fields: Sequence[str] | None,
-    filters: Mapping[str, Any],
-    date_field: str | None,
-    start: str | None,
-    end: str | None,
-    limit: int,
-    known_columns: Sequence[str] | None = None,
-) -> tuple[list[dict[str, Any]], list[str]]:
-    import duckdb
-
-    read_path = _parquet_read_path(paths, date_field=date_field, start=start, end=end)
-    if read_path is _NO_MATCHING_PARQUET_PARTITIONS:
-        available = list(known_columns or [])
-        selected = list(fields or available)
-        missing = [field for field in selected if available and field not in available]
-        if missing:
-            raise DataBrowserError("Unknown field(s): " + ", ".join(missing))
-        for field in filters:
-            if available and field not in available:
-                raise DataBrowserError(f"Unknown filter field: {field}")
-        return [], selected
-    where_sql, params = _where_clause(filters, date_field=date_field, start=start, end=end)
-    with duckdb.connect(database=":memory:") as conn:
-        available = [
-            str(row[0])
-            for row in conn.execute(
-                "DESCRIBE SELECT * FROM read_parquet(?, hive_partitioning = true, union_by_name = true)",
-                [read_path],
-            ).fetchall()
-        ]
-        visible_available = _visible_preview_columns(available, known_columns)
-        selected = list(fields or visible_available)
-        missing = [field for field in selected if field not in available]
-        if missing:
-            raise DataBrowserError("Unknown field(s): " + ", ".join(missing))
-        for field in filters:
-            if field not in available:
-                raise DataBrowserError(f"Unknown filter field: {field}")
-        if date_field and (start or end) and date_field not in available:
-            raise DataBrowserError(f"Date filter field {date_field!r} is not present in dataset.")
-        select_sql = ", ".join(_quote_identifier(field) for field in selected) or "*"
-        sql = (
-            f"SELECT {select_sql} "
-            "FROM read_parquet(?, hive_partitioning = true, union_by_name = true)"
-            f"{where_sql} LIMIT ?"
-        )
-        frame = conn.execute(sql, [read_path, *params, limit]).fetchdf()
-        return frame.to_dict(orient="records"), list(frame.columns)
-
-
-def _visible_preview_columns(available: Sequence[str], known_columns: Sequence[str] | None) -> list[str]:
-    known = {str(column) for column in known_columns or []}
-    visible: list[str] = []
-    for column in available:
-        if column == "table" and column not in known:
-            continue
-        visible.append(column)
-    return visible
-
-
-def _parquet_read_path(
-    paths: Sequence[Path],
-    *,
-    date_field: str | None = None,
-    start: str | None = None,
-    end: str | None = None,
-) -> str | list[str] | object:
-    if len(paths) == 1:
-        only = paths[0]
-        if only.is_file():
-            return str(only)
-        if only.is_dir():
-            date_globs = _date_partition_globs(only, date_field=date_field, start=start, end=end)
-            if date_globs is not None:
-                return date_globs or _NO_MATCHING_PARQUET_PARTITIONS
-            return str(only / "**" / "*.parquet")
-    common = Path(os.path.commonpath([str(path.parent) for path in paths]))
-    return str(common / "**" / "*.parquet")
-
-
-def _date_partition_globs(
-    directory: Path,
-    *,
-    date_field: str | None,
-    start: str | None,
-    end: str | None,
-) -> list[str] | None:
-    if not date_field or not (start or end):
-        return None
-    partition_dirs = [
-        path
-        for path in directory.glob(f"{date_field}=*")
-        if path.is_dir()
-    ]
-    date_files = [path for path in directory.glob("*.parquet") if _date_file_value(path) is not None]
-    if not partition_dirs and not date_files:
-        return None
-
-    start_compact = start.replace("-", "") if start else None
-    end_compact = end.replace("-", "") if end else None
-    if start_compact is not None and (len(start_compact) != 8 or not start_compact.isdigit()):
-        return None
-    if end_compact is not None and (len(end_compact) != 8 or not end_compact.isdigit()):
-        return None
-
-    globs: list[str] = []
-    for path in sorted(partition_dirs):
-        value = path.name.split("=", 1)[1].replace("-", "")
-        if start_compact is not None and value < start_compact:
-            continue
-        if end_compact is not None and value > end_compact:
-            continue
-        globs.append(str(path / "**" / "*.parquet"))
-    for path in sorted(date_files):
-        value = _date_file_value(path)
-        if value is None:
-            continue
-        if start_compact is not None and value < start_compact:
-            continue
-        if end_compact is not None and value > end_compact:
-            continue
-        globs.append(str(path))
-    return globs
-
-
-def _date_file_value(path: Path) -> str | None:
-    value = path.stem.replace("-", "")
-    return value if len(value) == 8 and value.isdigit() else None
-
-
-def _where_clause(
-    filters: Mapping[str, Any],
-    *,
-    date_field: str | None,
-    start: str | None,
-    end: str | None,
-) -> tuple[str, list[Any]]:
-    clauses: list[str] = []
-    params: list[Any] = []
-    for field, value in filters.items():
-        quoted = _quote_identifier(field)
-        if isinstance(value, (list, tuple, set, frozenset)):
-            values = [item for item in value if item is not None]
-            if not values:
-                clauses.append("1 = 0")
-                continue
-            placeholders = ", ".join("?" for _ in values)
-            clauses.append(f"{quoted} IN ({placeholders})")
-            params.extend(values)
-        elif value is None:
-            clauses.append(f"{quoted} IS NULL")
-        else:
-            clauses.append(f"{quoted} = ?")
-            params.append(value)
-
-    if date_field and (start or end):
-        quoted_date = _quote_identifier(date_field)
-        if start:
-            clauses.append(f"REPLACE(CAST({quoted_date} AS VARCHAR), '-', '') >= ?")
-            params.append(start)
-        if end:
-            clauses.append(f"REPLACE(CAST({quoted_date} AS VARCHAR), '-', '') <= ?")
-            params.append(end)
-
-    if not clauses:
-        return "", params
-    return " WHERE " + " AND ".join(clauses), params
-
-
 def _normalize_preview_filters(
     summary: DatasetSummary,
     filters: Mapping[str, Any] | None,
@@ -1313,10 +1142,6 @@ def _path_sort_mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
-
-
-def _quote_identifier(identifier: str) -> str:
-    return '"' + identifier.replace('"', '""') + '"'
 
 
 def _int_or_none(value: Any) -> int | None:
