@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 
 class QueryRequest(BaseModel):
@@ -46,6 +46,35 @@ class SourceRequest(BaseModel):
     persist: bool = Field(
         default=False,
         description="Reserved for explicit collection jobs. Source requests never persist data.",
+    )
+
+
+class DatasetQueryRequest(BaseModel):
+    fields: list[str] | None = Field(
+        default=None,
+        description="Selected dataset columns, in return order. Null returns the declared columns.",
+    )
+    filters: dict[str, JsonValue] = Field(
+        default_factory=dict,
+        description=(
+            "Exact-match predicates, AND-combined. List values become IN filters and null "
+            "values become IS NULL filters."
+        ),
+    )
+    start_date: str | None = Field(
+        default=None,
+        description="Inclusive start bound on the dataset date_field, YYYYMMDD or YYYY-MM-DD.",
+    )
+    end_date: str | None = Field(
+        default=None,
+        description="Inclusive end bound on the dataset date_field, YYYYMMDD or YYYY-MM-DD.",
+    )
+    limit: int | None = Field(
+        default=None,
+        description=(
+            "Maximum rows. Null uses the server AXDATA_API_MAX_QUERY_ROWS cap "
+            "(default 100000); explicit limits above the cap are rejected."
+        ),
     )
 
 

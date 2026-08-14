@@ -4,39 +4,78 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 
 from .config import data_root
-from .serialization import response_payload
-
+from .serialization import error_payload, response_payload, to_jsonable
 
 router = APIRouter()
 
 
 @router.get("/v1/data/datasets")
-def list_local_datasets() -> dict[str, Any]:
-    from axdata_core import list_datasets
+def list_local_datasets() -> JSONResponse:
+    try:
+        from axdata_core import DatasetCatalogError, list_datasets
+    except ImportError:
+        return _dataset_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "CORE_UNAVAILABLE",
+            "axdata_core is not available. Install the core package before listing datasets.",
+        )
 
-    datasets = [item.to_dict() for item in list_datasets(data_root=data_root())]
-    return response_payload(
-        datasets,
-        count=len(datasets),
-        empty_state=(
-            "No local datasets found. Run a Collector/Downloader first."
-            if not datasets
-            else None
+    try:
+        datasets = [item.to_dict() for item in list_datasets(data_root=data_root())]
+    except (DatasetCatalogError, ValueError) as exc:
+        return _dataset_error(
+            status.HTTP_400_BAD_REQUEST,
+            "DATASET_QUERY_ERROR",
+            str(exc),
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=to_jsonable(
+            response_payload(
+                datasets,
+                count=len(datasets),
+                empty_state=(
+                    "No local datasets found. Run a Collector/Downloader first."
+                    if not datasets
+                    else None
+                ),
+            )
         ),
     )
 
 
 @router.get("/v1/data/datasets/{dataset}")
-def inspect_local_dataset(dataset: str) -> dict[str, Any]:
-    from axdata_core import DataBrowserError, get_dataset
+def inspect_local_dataset(dataset: str) -> JSONResponse:
+    try:
+        from axdata_core import DataBrowserError, DatasetCatalogError, get_dataset
+    except ImportError:
+        return _dataset_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "CORE_UNAVAILABLE",
+            "axdata_core is not available. Install the core package before listing datasets.",
+        )
 
     try:
         summary = get_dataset(dataset, data_root=data_root())
     except DataBrowserError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return response_payload(summary.to_dict())
+        return _dataset_error(
+            status.HTTP_404_NOT_FOUND,
+            "DATASET_NOT_FOUND",
+            str(exc),
+        )
+    except (DatasetCatalogError, ValueError) as exc:
+        return _dataset_error(
+            status.HTTP_400_BAD_REQUEST,
+            "DATASET_QUERY_ERROR",
+            str(exc),
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=to_jsonable(response_payload(summary.to_dict())),
+    )
 
 
 @router.get("/v1/data/datasets/{dataset}/preview")
@@ -114,3 +153,8 @@ def _parse_filter_query(values: list[str]) -> dict[str, Any]:
             raise DataBrowserError("filter key cannot be empty.")
         filters[key] = value.strip()
     return filters
+
+
+def _dataset_error(http_status: int, code: str, message: str, **details: Any) -> JSONResponse:
+    payload = error_payload(code, message, **details)
+    return JSONResponse(status_code=http_status, content=to_jsonable(payload))

@@ -5,12 +5,12 @@ from __future__ import annotations
 import os
 import json
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import urlencode, urlparse, urlunparse
+from urllib.parse import quote, urlencode, urlparse, urlunparse
 from uuid import uuid4
 
 import requests
@@ -138,6 +138,102 @@ class AxDataClient:
         if self.mode == "local":
             return self._query_local(api_name, fields=fields, **params)
         return self._query_api(api_name, fields=fields, **params)
+
+    def datasets(self) -> list[dict[str, Any]]:
+        """List every dataset known to the AxData catalog as stable dicts.
+
+        Local mode serializes :class:`axdata_core.DatasetDescriptor` objects;
+        API mode returns the server's dataset payloads. Neither exposes an
+        internal dataclass.
+        """
+
+        if self.mode == "local":
+            return [
+                self._descriptor_to_dict(descriptor)
+                for descriptor in self._list_dataset_descriptors()
+            ]
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        response = self._http_session.get(
+            f"{self.api_base}/v1/data/datasets",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return list(self._extract_records(response.json()))
+
+    def dataset(self, dataset_id: str) -> dict[str, Any]:
+        """Resolve one dataset's metadata as a stable dict.
+
+        Raises :class:`AxDataError` with status 404 when the dataset does not
+        exist, and status 400 on catalog conflicts or unsafe paths.
+        """
+
+        if not dataset_id:
+            raise ValueError("dataset_id is required")
+        if self.mode == "local":
+            return self._descriptor_to_dict(self._get_dataset_descriptor(dataset_id))
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        response = self._http_session.get(
+            f"{self.api_base}/v1/data/datasets/{quote(str(dataset_id), safe='')}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return self._extract_data_object(response.json())
+
+    def query_dataset(
+        self,
+        dataset_id: str,
+        fields: str | Sequence[str] | None = None,
+        *,
+        filters: Mapping[str, Any] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int | None = None,
+    ):
+        """Query one catalogued AxData dataset and return a pandas.DataFrame.
+
+        Local mode calls ``axdata_core.query_dataset`` directly; API mode calls
+        ``POST /v1/data/datasets/{dataset_id}/query``. Fields, date bounds,
+        empty results and error categories behave the same in both modes.
+        Local queries are not subject to the server ``AXDATA_API_MAX_QUERY_ROWS``
+        cap; API queries with ``limit=None`` are truncated at the server cap.
+
+        Raises :class:`AxDataError` with the HTTP-style status code for the
+        failure category: 404 for unknown datasets or missing files, 400 for
+        unknown fields/filters, invalid dates/limits or catalog conflicts,
+        413 when an explicit API-mode limit exceeds the server cap.
+        """
+
+        if not dataset_id:
+            raise ValueError("dataset_id is required")
+        selected_fields = self._normalize_fields(fields) if fields is not None else None
+        normalized_filters = {
+            str(key): self._normalize_param_value(value)
+            for key, value in dict(filters or {}).items()
+        }
+        start = self._normalize_date_text(start_date)
+        end = self._normalize_date_text(end_date)
+        normalized_limit = self._normalize_limit(limit)
+        if self.mode == "local":
+            return self._query_dataset_local(
+                dataset_id,
+                fields=selected_fields,
+                filters=normalized_filters,
+                start_date=start,
+                end_date=end,
+                limit=normalized_limit,
+            )
+        return self._query_dataset_api(
+            dataset_id,
+            fields=selected_fields,
+            filters=normalized_filters,
+            start_date=start,
+            end_date=end,
+            limit=normalized_limit,
+        )
 
     def call(
         self,
@@ -470,6 +566,145 @@ class AxDataClient:
             limit=query_parts["limit"],
         )
 
+    def _query_dataset_local(
+        self,
+        dataset_id: str,
+        *,
+        fields: list[str] | None,
+        filters: dict[str, Any],
+        start_date: str | None,
+        end_date: str | None,
+        limit: int | None,
+    ):
+        try:
+            from axdata_core import query_dataset as core_query_dataset
+        except ImportError as exc:
+            raise AxDataError(
+                "AxData local dataset queries require axdata_core and DuckDB. Install the "
+                "workspace or use API mode with api_base.",
+                code="CORE_UNAVAILABLE",
+                status_code=503,
+            ) from exc
+        try:
+            return core_query_dataset(
+                dataset_id,
+                data_root=self.data_root,
+                fields=fields,
+                filters=filters or None,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+            )
+        except Exception as exc:
+            raise self._translate_dataset_error(exc) from exc
+
+    def _query_dataset_api(
+        self,
+        dataset_id: str,
+        *,
+        fields: list[str] | None,
+        filters: dict[str, Any],
+        start_date: str | None,
+        end_date: str | None,
+        limit: int | None,
+    ):
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        payload: dict[str, Any] = {}
+        if fields is not None:
+            payload["fields"] = fields
+        if filters:
+            payload["filters"] = filters
+        if start_date is not None:
+            payload["start_date"] = start_date
+        if end_date is not None:
+            payload["end_date"] = end_date
+        if limit is not None:
+            payload["limit"] = limit
+        response = self._http_session.post(
+            f"{self.api_base}/v1/data/datasets/{quote(str(dataset_id), safe='')}/query",
+            json=payload,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        data = response.json()
+        records = self._extract_records(data)
+        columns = None
+        if isinstance(data, Mapping):
+            meta = data.get("meta")
+            if isinstance(meta, Mapping) and meta.get("columns"):
+                columns = [str(column) for column in meta["columns"]]
+        return self._to_dataframe(records, columns=columns)
+
+    def _list_dataset_descriptors(self) -> list[Any]:
+        try:
+            from axdata_core import list_dataset_descriptors
+        except ImportError as exc:
+            raise AxDataError(
+                "AxData local mode requires axdata_core. Install the workspace or use API "
+                "mode with api_base.",
+                code="CORE_UNAVAILABLE",
+                status_code=503,
+            ) from exc
+        try:
+            return list_dataset_descriptors(data_root=self.data_root)
+        except Exception as exc:
+            raise self._translate_dataset_error(exc) from exc
+
+    def _get_dataset_descriptor(self, dataset_id: str) -> Any:
+        try:
+            from axdata_core import get_dataset_descriptor
+        except ImportError as exc:
+            raise AxDataError(
+                "AxData local mode requires axdata_core. Install the workspace or use API "
+                "mode with api_base.",
+                code="CORE_UNAVAILABLE",
+                status_code=503,
+            ) from exc
+        try:
+            return get_dataset_descriptor(dataset_id, data_root=self.data_root)
+        except Exception as exc:
+            raise self._translate_dataset_error(exc) from exc
+
+    @staticmethod
+    def _descriptor_to_dict(descriptor: Any) -> dict[str, Any]:
+        return {
+            "dataset_id": descriptor.dataset_id,
+            "layer": descriptor.layer,
+            "format": descriptor.format,
+            "paths": [str(path) for path in descriptor.paths],
+            "columns": list(descriptor.columns),
+            "primary_key": list(descriptor.primary_key),
+            "date_field": descriptor.date_field,
+            "partition_by": list(descriptor.partition_by),
+            "write_mode": descriptor.write_mode,
+            "source_runs": list(descriptor.source_runs),
+            "updated_at": descriptor.updated_at,
+            "declaration": dict(descriptor.declaration),
+        }
+
+    @staticmethod
+    def _translate_dataset_error(exc: Exception) -> AxDataError:
+        """Map local core failures to the same client errors API mode raises."""
+
+        try:
+            from axdata_core import (
+                CatalogConflictError,
+                DatasetCatalogError,
+                DatasetNotFoundError,
+                DatasetQueryError,
+            )
+        except ImportError:
+            return AxDataError(str(exc), code="CORE_UNAVAILABLE", status_code=503)
+        if isinstance(exc, DatasetNotFoundError) or isinstance(exc, FileNotFoundError):
+            return AxDataError(str(exc), code="DATASET_NOT_FOUND", status_code=404)
+        if isinstance(exc, (DatasetQueryError, DatasetCatalogError, CatalogConflictError)):
+            return AxDataError(str(exc), code="DATASET_QUERY_ERROR", status_code=400)
+        if isinstance(exc, ImportError):
+            return AxDataError(str(exc), code="CORE_UNAVAILABLE", status_code=503)
+        return AxDataError(str(exc), code="DATASET_QUERY_ERROR", status_code=500)
+
     def _call_local(
         self,
         interface: str,
@@ -797,7 +1032,7 @@ class AxDataClient:
         return dict(payload)
 
     @staticmethod
-    def _to_dataframe(records: list[Mapping[str, Any]]):
+    def _to_dataframe(records: list[Mapping[str, Any]], *, columns: list[str] | None = None):
         try:
             import pandas as pd
         except ImportError as exc:
@@ -806,7 +1041,10 @@ class AxDataClient:
                 "Install it with `pip install pandas` or `pip install axdata[pandas]`."
             ) from exc
 
-        return pd.DataFrame.from_records(records)
+        frame = pd.DataFrame.from_records(records)
+        if frame.empty and columns:
+            frame = pd.DataFrame(columns=columns)
+        return frame
 
 
 class AxDataStream:

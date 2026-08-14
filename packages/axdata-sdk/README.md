@@ -119,6 +119,43 @@ remote = ax.AxDataClient.api(api_base="http://192.168.1.20:8666", token=None)
 
 所有查询和数据源请求默认返回 `pandas.DataFrame`。
 
+## 数据集查询
+
+Collector/Plugin 声明并落成 Parquet 的数据集不需要修改任何静态 schema 就能查询。
+本地模式直接读当前机器的 AxData 数据目录：
+
+```python
+client = ax.AxDataClient()
+
+datasets = client.datasets()          # list[dict]，目录列举
+demo = client.dataset("demo.track_strength")  # dict，单个数据集元数据
+
+df = client.query_dataset(
+    "demo.track_strength",
+    fields=["date", "track_id", "strength"],
+    filters={"track_id": "AI"},
+    start_date="2026-01-02",
+    end_date="2026-01-31",
+)
+```
+
+API 模式通过 HTTP 访问同一套目录和查询：
+
+```python
+remote = ax.AxDataClient.api(api_base="http://192.168.1.20:8666")
+
+remote_df = remote.query_dataset(
+    "demo.track_strength",
+    fields=["date", "track_id", "strength"],
+    filters={"track_id": ["AI", "BK"]},
+    limit=100,
+)
+```
+
+API 模式对 `limit=None` 的请求使用服务端 `AXDATA_API_MAX_QUERY_ROWS` 上限（默认
+100000），截断时在响应 metadata 返回 `truncated=true`；本地查询不受该上限影响。
+大规模研究请使用 Snapshot 导出，不要通过 JSON API 拉全量。
+
 ## 完整项目
 
 如果需要 Web 控制台、接口文档、插件管理页面、API 服务和源码开发环境，请使用完整项目安装方式：
