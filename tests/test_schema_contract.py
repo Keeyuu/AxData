@@ -3,7 +3,6 @@ from pathlib import Path
 
 from axdata_core import get_schema, list_tables
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -13,6 +12,10 @@ def test_initial_tables_are_registered():
         "trade_cal",
         "daily",
         "adj_factor",
+        "minute",
+        "index_daily",
+        "index_minute",
+        "index_catalog",
     }
     assert "stock_basic" not in set(list_tables())
     assert "stock_basic" in set(list_tables(include_aliases=True))
@@ -23,7 +26,7 @@ def test_stock_basic_alias_points_to_exchange_interface():
 
 
 def test_schema_contract_has_primary_keys_and_required_metadata():
-    for table in ("stock_basic_exchange", "trade_cal", "daily", "adj_factor"):
+    for table in list_tables():
         schema = get_schema(table)
 
         assert schema.name == table
@@ -43,28 +46,67 @@ def test_schema_contract_has_primary_keys_and_required_metadata():
 def test_daily_schema_matches_quant_baseline():
     schema = get_schema("daily")
 
-    for field in ("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"):
+    for field in (
+        "instrument_id",
+        "symbol",
+        "tdx_code",
+        "exchange",
+        "trade_time",
+        "period",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+    ):
         assert field in schema.field_names
 
-    assert schema.primary_key == ("ts_code", "trade_date")
-    assert schema.date_field == "trade_date"
+    assert schema.primary_key == ("instrument_id", "trade_time", "period")
+    assert schema.date_field == "trade_time"
 
 
-def test_daily_schema_documents_canonical_aliases_and_units():
+def test_daily_schema_documents_legacy_aliases():
     schema = get_schema("daily")
     fields = {field.name: field for field in schema.fields}
 
-    assert schema.provider_field_mappings == {
-        "instrument_id": "ts_code",
-        "volume": "vol",
-        "trade_time": "trade_date",
-    }
-    assert fields["ts_code"].aliases == ("instrument_id",)
-    assert fields["trade_date"].aliases == ("trade_time",)
-    assert fields["vol"].aliases == ("volume",)
-    assert fields["open"].unit == "CNY"
-    assert fields["vol"].unit == "lot"
-    assert fields["amount"].unit == "thousand CNY"
+    # Legacy Tushare-style names are kept as documentation-level aliases only;
+    # queries must use the stored column names.
+    assert fields["instrument_id"].aliases == ("ts_code",)
+    assert fields["trade_time"].aliases == ("trade_date",)
+    assert fields["volume"].aliases == ("vol",)
+    assert not schema.provider_field_mappings
+
+
+def test_kline_tables_share_the_tdx_column_shape():
+    daily = get_schema("daily")
+    minute = get_schema("minute")
+    index_daily = get_schema("index_daily")
+    index_minute = get_schema("index_minute")
+
+    assert minute.fields == daily.fields
+    assert index_daily.field_names == daily.field_names + ("up_count", "down_count")
+    assert index_minute.fields == index_daily.fields
+    for schema in (daily, minute, index_daily, index_minute):
+        assert schema.primary_key == ("instrument_id", "trade_time", "period")
+        assert schema.date_field == "trade_time"
+
+
+def test_index_catalog_schema_pins_pk_and_category_tags():
+    schema = get_schema("index_catalog")
+
+    assert schema.primary_key == ("instrument_id",)
+    assert schema.date_field is None
+    for field in (
+        "instrument_id",
+        "symbol",
+        "tdx_code",
+        "exchange",
+        "name",
+        "index_type",
+        "previous_close",
+    ):
+        assert field in schema.field_names
 
 
 def test_adj_factor_schema_accepts_instrument_id_as_source_alias():

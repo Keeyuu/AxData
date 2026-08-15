@@ -143,19 +143,19 @@ def _transform_daily(
 ) -> pd.DataFrame:
     rows = []
     for row in records:
-        trade_date = _trade_date_from_record(row)
+        # Core daily is TDX-shaped (instrument_id/trade_time/period, plan
+        # axdata-integration/16): trade_time is normalized to YYYYMMDD so the
+        # date partition directory stays a legal path segment on Windows.
         rows.append(
             {
-                "ts_code": row.get("ts_code") or row.get("instrument_id"),
-                "trade_date": trade_date,
+                "instrument_id": row.get("instrument_id") or row.get("ts_code"),
+                "trade_time": _trade_date_from_record(row),
+                "period": "day",
                 "open": row.get("open"),
                 "high": row.get("high"),
                 "low": row.get("low"),
                 "close": row.get("close"),
-                "pre_close": row.get("pre_close"),
-                "change": row.get("change"),
-                "pct_chg": row.get("pct_chg"),
-                "vol": row.get("vol", row.get("volume")),
+                "volume": row.get("volume", row.get("vol")),
                 "amount": row.get("amount"),
             }
         )

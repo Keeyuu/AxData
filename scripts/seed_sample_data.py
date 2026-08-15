@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-
 from axdata_core import get_schema, write_core_table
 
 
@@ -113,8 +112,18 @@ def main() -> None:
         "trade_cal",
         pd.DataFrame(
             [
-                {"exchange": "SSE", "cal_date": "20240101", "is_open": 0, "pretrade_date": "20231229"},
-                {"exchange": "SSE", "cal_date": "20240102", "is_open": 1, "pretrade_date": "20231229"},
+                {
+                    "exchange": "SSE",
+                    "cal_date": "20240101",
+                    "is_open": 0,
+                    "pretrade_date": "20231229",
+                },
+                {
+                    "exchange": "SSE",
+                    "cal_date": "20240102",
+                    "is_open": 1,
+                    "pretrade_date": "20231229",
+                },
             ]
         ),
         root=data_root,
@@ -125,16 +134,14 @@ def main() -> None:
         pd.DataFrame(
             [
                 {
-                    "ts_code": "000001.SZ",
-                    "trade_date": "20240102",
+                    "instrument_id": "000001.SZ",
+                    "trade_time": "2024-01-02T15:00:00+08:00",
+                    "period": "day",
                     "open": 10.0,
                     "high": 10.5,
                     "low": 9.8,
                     "close": 10.2,
-                    "pre_close": 10.0,
-                    "change": 0.2,
-                    "pct_chg": 2.0,
-                    "vol": 1000.0,
+                    "volume": 1000.0,
                     "amount": 10200.0,
                 }
             ]

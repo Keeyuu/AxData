@@ -3,32 +3,39 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-
 from axdata_core.collector_scheduler import CollectorRun, CollectorSchedulerStore
-from axdata_core.data_browser import DatasetSummary, delete_dataset, get_dataset, list_datasets, preview_dataset
-
+from axdata_core.data_browser import (
+    DatasetSummary,
+    delete_dataset,
+    get_dataset,
+    list_datasets,
+    preview_dataset,
+)
 
 DAILY_ROWS = [
     {
-        "ts_code": "000001.SZ",
-        "trade_date": "20240102",
+        "instrument_id": "000001.SZ",
+        "trade_time": "20240102",
+        "period": "day",
         "open": 10.0,
         "close": 10.2,
-        "vol": 1000.0,
+        "volume": 1000.0,
     },
     {
-        "ts_code": "000001.SZ",
-        "trade_date": "20240103",
+        "instrument_id": "000001.SZ",
+        "trade_time": "20240103",
+        "period": "day",
         "open": 10.2,
         "close": 10.6,
-        "vol": 1200.0,
+        "volume": 1200.0,
     },
     {
-        "ts_code": "600000.SH",
-        "trade_date": "20240102",
+        "instrument_id": "600000.SH",
+        "trade_time": "20240102",
+        "period": "day",
         "open": 8.0,
         "close": 8.1,
-        "vol": 900.0,
+        "volume": 900.0,
     },
 ]
 
@@ -61,34 +68,48 @@ def _write_daily_run(tmp_path: Path) -> tuple[Path, Path]:
                     "quality": {
                         "quality_status": "ok",
                         "row_count_value": 3,
-                        "date_field": "trade_date",
+                        "date_field": "trade_time",
                         "write_mode": "upsert_by_key",
-                        "partition_by": ["trade_date"],
+                        "partition_by": ["trade_time"],
                         "primary_key": "pass",
-                        "write_primary_key": ["ts_code", "trade_date"],
+                        "write_primary_key": ["instrument_id", "trade_time", "period"],
                         "rows_before": 2,
                         "rows_written": 3,
                         "rows_after": 3,
                         "duplicate_rows_dropped": 1,
                         "date_range": {"min": "20240102", "max": "20240103"},
-                        "schema_columns": ["ts_code", "trade_date", "open", "close", "vol"],
+                        "schema_columns": [
+                            "instrument_id",
+                            "trade_time",
+                            "period",
+                            "open",
+                            "close",
+                            "volume",
+                        ],
                     },
                 },
             },
             quality={
                 "quality_status": "ok",
                 "row_count_value": 3,
-                "date_field": "trade_date",
+                "date_field": "trade_time",
                 "write_mode": "upsert_by_key",
-                "partition_by": ["trade_date"],
+                "partition_by": ["trade_time"],
                 "primary_key": "pass",
-                "write_primary_key": ["ts_code", "trade_date"],
+                "write_primary_key": ["instrument_id", "trade_time", "period"],
                 "rows_before": 2,
                 "rows_written": 3,
                 "rows_after": 3,
                 "duplicate_rows_dropped": 1,
                 "date_range": {"min": "20240102", "max": "20240103"},
-                "schema_columns": ["ts_code", "trade_date", "open", "close", "vol"],
+                "schema_columns": [
+                    "instrument_id",
+                    "trade_time",
+                    "period",
+                    "open",
+                    "close",
+                    "volume",
+                ],
             },
             finished_at="2026-06-29T01:00:00+00:00",
             created_at="2026-06-29T00:59:00+00:00",
@@ -111,13 +132,13 @@ def test_data_browser_discovers_collector_run_and_previews_filtered_rows(tmp_pat
     assert daily.row_count == 3
     assert daily.date_min == "20240102"
     assert daily.date_max == "20240103"
-    assert daily.columns == ["ts_code", "trade_date", "open", "close", "vol"]
+    assert daily.columns == ["instrument_id", "trade_time", "period", "open", "close", "volume"]
     assert daily.quality_status == "ok"
     assert daily.latest_run_id == "run_browser_daily"
     assert daily.write_mode == "upsert_by_key"
-    assert daily.partition_by == ["trade_date"]
-    assert daily.primary_key == ["ts_code", "trade_date"]
-    assert daily.date_field == "trade_date"
+    assert daily.partition_by == ["trade_time"]
+    assert daily.primary_key == ["instrument_id", "trade_time", "period"]
+    assert daily.date_field == "trade_time"
     assert daily.rows_before == 2
     assert daily.rows_written == 3
     assert daily.rows_after == 3
@@ -129,7 +150,7 @@ def test_data_browser_discovers_collector_run_and_previews_filtered_rows(tmp_pat
     preview = preview_dataset(
         "daily",
         data_root=data_root,
-        fields=["ts_code", "trade_date", "close"],
+        fields=["instrument_id", "trade_time", "close"],
         symbol="000001.SZ",
         start="2024-01-03",
         end="2024-01-31",
@@ -137,12 +158,10 @@ def test_data_browser_discovers_collector_run_and_previews_filtered_rows(tmp_pat
     )
 
     assert preview.limit == 100
-    assert preview.columns == ["ts_code", "trade_date", "close"]
+    assert preview.columns == ["instrument_id", "trade_time", "close"]
     assert preview.preview_format == "parquet"
     assert preview.preview_paths == [str(parquet_path.resolve())]
-    assert preview.rows == [
-        {"ts_code": "000001.SZ", "trade_date": "20240103", "close": 10.6}
-    ]
+    assert preview.rows == [{"instrument_id": "000001.SZ", "trade_time": "20240103", "close": 10.6}]
 
 
 def test_data_browser_reports_stale_output_paths(tmp_path) -> None:
@@ -234,19 +253,19 @@ def test_data_browser_delete_removes_snapshot_dataset_directory(tmp_path) -> Non
 
 def test_data_browser_uses_parquet_metadata_for_partitioned_stats(tmp_path) -> None:
     data_root = tmp_path / "data"
-    first_partition = data_root / "core" / "table=daily" / "trade_date=20240102"
-    second_partition = data_root / "core" / "table=daily" / "trade_date=20240103"
+    first_partition = data_root / "core" / "table=daily" / "trade_time=20240102"
+    second_partition = data_root / "core" / "table=daily" / "trade_time=20240103"
     first_partition.mkdir(parents=True)
     second_partition.mkdir(parents=True)
     pd.DataFrame(
         [
-            {"ts_code": "000001.SZ", "close": 10.2},
-            {"ts_code": "600000.SH", "close": 8.1},
+            {"instrument_id": "000001.SZ", "close": 10.2},
+            {"instrument_id": "600000.SH", "close": 8.1},
         ]
     ).to_parquet(first_partition / "part-0.parquet", engine="pyarrow", index=False)
     pd.DataFrame(
         [
-            {"ts_code": "000001.SZ", "close": 10.6},
+            {"instrument_id": "000001.SZ", "close": 10.6},
         ]
     ).to_parquet(second_partition / "part-0.parquet", engine="pyarrow", index=False)
 
@@ -256,7 +275,7 @@ def test_data_browser_uses_parquet_metadata_for_partitioned_stats(tmp_path) -> N
     assert daily.row_count == 3
     assert daily.date_min == "20240102"
     assert daily.date_max == "20240103"
-    assert {"ts_code", "trade_date", "close"} <= set(daily.columns)
+    assert {"instrument_id", "trade_time", "close"} <= set(daily.columns)
     assert "table" not in daily.columns
 
 
@@ -286,9 +305,9 @@ def test_data_browser_stats_marks_large_directory_as_limited(monkeypatch, tmp_pa
     data_root = tmp_path / "data"
     partition_root = data_root / "core" / "table=daily"
     for index in range(3):
-        partition = partition_root / f"trade_date=2024010{index + 1}"
+        partition = partition_root / f"trade_time=2024010{index + 1}"
         partition.mkdir(parents=True)
-        pd.DataFrame([{"ts_code": "000001.SZ", "close": 10.0 + index}]).to_parquet(
+        pd.DataFrame([{"instrument_id": "000001.SZ", "close": 10.0 + index}]).to_parquet(
             partition / "part-0.parquet",
             engine="pyarrow",
             index=False,
@@ -325,7 +344,9 @@ def test_data_browser_directory_probe_is_bounded(monkeypatch, tmp_path) -> None:
     assert daily.metadata["parquet_stats_dir_limit"] == 2
 
 
-def test_data_browser_listing_does_not_count_parquet_rows_with_duckdb(monkeypatch, tmp_path) -> None:
+def test_data_browser_listing_does_not_count_parquet_rows_with_duckdb(
+    monkeypatch, tmp_path
+) -> None:
     data_root, _parquet_path = _write_daily_run(tmp_path)
 
     class FailingDuckDB:
@@ -337,10 +358,12 @@ def test_data_browser_listing_does_not_count_parquet_rows_with_duckdb(monkeypatc
     daily = get_dataset("daily", data_root=data_root)
 
     assert daily.row_count == 3
-    assert daily.columns == ["ts_code", "trade_date", "open", "close", "vol"]
+    assert daily.columns == ["instrument_id", "trade_time", "period", "open", "close", "volume"]
 
 
-def test_data_browser_uses_run_metadata_without_enumerating_parquet_files(monkeypatch, tmp_path) -> None:
+def test_data_browser_uses_run_metadata_without_enumerating_parquet_files(
+    monkeypatch, tmp_path
+) -> None:
     data_root, _parquet_path = _write_daily_run(tmp_path)
 
     def fail_stats(*args, **kwargs):  # pragma: no cover - should never be called
@@ -355,22 +378,22 @@ def test_data_browser_uses_run_metadata_without_enumerating_parquet_files(monkey
     assert daily.row_count == 3
     assert daily.date_min == "20240102"
     assert daily.date_max == "20240103"
-    assert daily.columns == ["ts_code", "trade_date", "open", "close", "vol"]
+    assert daily.columns == ["instrument_id", "trade_time", "period", "open", "close", "volume"]
 
 
 def test_data_browser_preview_can_read_directory_output_path(tmp_path) -> None:
     data_root = tmp_path / "data"
     output_dir = tmp_path / "export" / "daily" / "parquet"
-    first_partition = output_dir / "trade_date=20240102"
-    second_partition = output_dir / "trade_date=20240103"
+    first_partition = output_dir / "trade_time=20240102"
+    second_partition = output_dir / "trade_time=20240103"
     first_partition.mkdir(parents=True)
     second_partition.mkdir(parents=True)
-    pd.DataFrame([{"ts_code": "000001.SZ", "close": 10.2}]).to_parquet(
+    pd.DataFrame([{"instrument_id": "000001.SZ", "period": "day", "close": 10.2}]).to_parquet(
         first_partition / "part-0.parquet",
         engine="pyarrow",
         index=False,
     )
-    pd.DataFrame([{"ts_code": "000001.SZ", "close": 10.6}]).to_parquet(
+    pd.DataFrame([{"instrument_id": "000001.SZ", "period": "day", "close": 10.6}]).to_parquet(
         second_partition / "part-0.parquet",
         engine="pyarrow",
         index=False,
@@ -388,9 +411,9 @@ def test_data_browser_preview_can_read_directory_output_path(tmp_path) -> None:
             quality={
                 "quality_status": "ok",
                 "row_count_value": 2,
-                "date_field": "trade_date",
+                "date_field": "trade_time",
                 "date_range": {"min": "20240102", "max": "20240103"},
-                "schema_columns": ["ts_code", "trade_date", "close"],
+                "schema_columns": ["instrument_id", "trade_time", "close"],
             },
             finished_at="2026-06-29T01:00:00+00:00",
         )
@@ -398,17 +421,17 @@ def test_data_browser_preview_can_read_directory_output_path(tmp_path) -> None:
 
     preview = preview_dataset("daily", data_root=data_root, start="20240103", end="20240103")
 
-    assert preview.rows == [{"ts_code": "000001.SZ", "trade_date": 20240103, "close": 10.6}]
+    assert preview.rows == [{"instrument_id": "000001.SZ", "trade_time": 20240103, "close": 10.6}]
 
 
 def test_data_browser_preview_prunes_date_partition_directory(tmp_path) -> None:
     data_root = tmp_path / "data"
     output_dir = tmp_path / "export" / "daily" / "parquet"
-    good_partition = output_dir / "trade_date=20240103"
-    bad_partition = output_dir / "trade_date=20240104"
+    good_partition = output_dir / "trade_time=20240103"
+    bad_partition = output_dir / "trade_time=20240104"
     good_partition.mkdir(parents=True)
     bad_partition.mkdir(parents=True)
-    pd.DataFrame([{"ts_code": "000001.SZ", "close": 10.6}]).to_parquet(
+    pd.DataFrame([{"instrument_id": "000001.SZ", "period": "day", "close": 10.6}]).to_parquet(
         good_partition / "part-0.parquet",
         engine="pyarrow",
         index=False,
@@ -427,9 +450,9 @@ def test_data_browser_preview_prunes_date_partition_directory(tmp_path) -> None:
             quality={
                 "quality_status": "ok",
                 "row_count_value": 1,
-                "date_field": "trade_date",
+                "date_field": "trade_time",
                 "date_range": {"min": "20240103", "max": "20240103"},
-                "schema_columns": ["ts_code", "trade_date", "close"],
+                "schema_columns": ["instrument_id", "trade_time", "close"],
             },
             finished_at="2026-06-29T01:00:00+00:00",
         )
@@ -438,6 +461,6 @@ def test_data_browser_preview_prunes_date_partition_directory(tmp_path) -> None:
     preview = preview_dataset("daily", data_root=data_root, start="20240103", end="20240103")
     missing = preview_dataset("daily", data_root=data_root, start="20240105", end="20240105")
 
-    assert preview.rows == [{"ts_code": "000001.SZ", "trade_date": 20240103, "close": 10.6}]
+    assert preview.rows == [{"instrument_id": "000001.SZ", "trade_time": 20240103, "close": 10.6}]
     assert missing.rows == []
-    assert missing.columns == ["ts_code", "trade_date", "close"]
+    assert missing.columns == ["instrument_id", "trade_time", "close"]

@@ -5,8 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-
-RUN_REAL_SMOKE = os.getenv("AXDATA_RUN_REAL_SMOKE", "").strip() in {"1", "true", "TRUE", "yes", "on"}
+RUN_REAL_SMOKE = os.getenv("AXDATA_RUN_REAL_SMOKE", "").strip() in {
+    "1",
+    "true",
+    "TRUE",
+    "yes",
+    "on",
+}
 
 
 def test_real_source_smoke_default_is_dry_skip(monkeypatch, tmp_path):
@@ -28,6 +33,7 @@ def test_real_source_smoke_default_is_dry_skip(monkeypatch, tmp_path):
 
 def test_real_source_smoke_fake_sources_write_core_and_query(monkeypatch, tmp_path):
     from axdata_core.source_request import SourceRequestResult
+
     from scripts import smoke_real_sources
 
     class Collection:
@@ -60,7 +66,9 @@ def test_real_source_smoke_fake_sources_write_core_and_query(monkeypatch, tmp_pa
         collectors={},
     )
     registry = SimpleNamespace(snapshot=lambda: snapshot)
-    monkeypatch.setattr(smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry)
+    monkeypatch.setattr(
+        smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry
+    )
     monkeypatch.setattr(smoke_real_sources, "_downloader_map", lambda _data_root: {})
 
     def fake_request_interface(interface_name, *, params, fields, persist, data_root):
@@ -138,8 +146,11 @@ def test_real_source_smoke_interfaces_filter_limits_targets(tmp_path):
     assert [row["label"] for row in summary["results"]] == ["daily", "adj_factor"]
 
 
-def test_real_source_smoke_optional_source_only_target_writes_product_formats(monkeypatch, tmp_path):
+def test_real_source_smoke_optional_source_only_target_writes_product_formats(
+    monkeypatch, tmp_path
+):
     from axdata_core.source_request import SourceRequestResult
+
     from scripts import smoke_real_sources
 
     class Collection:
@@ -167,7 +178,9 @@ def test_real_source_smoke_optional_source_only_target_writes_product_formats(mo
         collectors={},
     )
     registry = SimpleNamespace(snapshot=lambda: snapshot)
-    monkeypatch.setattr(smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry)
+    monkeypatch.setattr(
+        smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry
+    )
     monkeypatch.setattr(smoke_real_sources, "_downloader_map", lambda _data_root: {})
 
     def fake_request_interface(interface_name, *, params, fields, persist, data_root):
@@ -237,7 +250,9 @@ def test_real_source_smoke_tdx_discovered_but_disabled_has_enable_hint(monkeypat
         collectors={},
     )
     registry = SimpleNamespace(snapshot=lambda: snapshot)
-    monkeypatch.setattr(smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry)
+    monkeypatch.setattr(
+        smoke_real_sources, "build_builtin_provider_registry", lambda **_kwargs: registry
+    )
     monkeypatch.setattr(smoke_real_sources, "_downloader_map", lambda _data_root: {})
 
     args = smoke_real_sources.parse_args(
@@ -283,7 +298,10 @@ def test_optional_real_source_smoke(tmp_path):
             for row in summary["results"]
             if row["status"] == "fail"
         ]
-        pytest.xfail("real source smoke failed because of source/network/config availability: " + "; ".join(failures))
+        pytest.xfail(
+            "real source smoke failed because of source/network/config availability: "
+            + "; ".join(failures)
+        )
     if not summary["summary"]["pass"]:
         pytest.skip("real source smoke ran but no source returned a usable sample")
     assert summary["summary"]["pass"] >= 1

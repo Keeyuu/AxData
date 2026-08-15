@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from .schema import get_schema, require_fields
 from .storage import core_table_duckdb_path, core_table_parquet_roots, core_table_path
-
 
 _DUCKDB_TYPE_CASTS = {
     "boolean": "BOOLEAN",
@@ -37,10 +37,6 @@ def _source_field_expression(table: str, field: str, available_fields: set[str])
 
     if field not in available_fields:
         return f"CAST(NULL AS {duckdb_type}) AS {quoted}"
-
-    schema = get_schema(table)
-    if field == schema.date_field:
-        return f"REPLACE(CAST({quoted} AS VARCHAR), '-', '') AS {quoted}"
 
     return f"CAST({quoted} AS {duckdb_type}) AS {quoted}"
 
@@ -82,7 +78,9 @@ def _available_source_fields(conn: Any, path: str) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
-def _source_read_path(table: str, root: str | Path, start_date: str | None, end_date: str | None) -> str | list[str] | object:
+def _source_read_path(
+    table: str, root: str | Path, start_date: str | None, end_date: str | None
+) -> str | list[str] | object:
     file_path = core_table_path(table, root)
     if file_path.exists():
         return str(file_path)
@@ -127,7 +125,9 @@ def _date_partition_globs(
     ):
         return None
     date_dirs = [path for path in partition_path.glob(f"{date_field}=*") if path.is_dir()]
-    date_files = [path for path in partition_path.glob("*.parquet") if _date_file_value(path) is not None]
+    date_files = [
+        path for path in partition_path.glob("*.parquet") if _date_file_value(path) is not None
+    ]
     if not date_dirs and not date_files:
         return None
     globs: list[str] = []
@@ -182,12 +182,17 @@ def _build_filter_clause(
     if start_date or end_date:
         if schema.date_field is None:
             raise ValueError(f"Table {table!r} does not define a date field.")
-        quoted_date = _quote_identifier(schema.date_field)
+        # Normalize the stored value (first 10 chars, hyphens stripped) so plain
+        # "2024-01-05", compact "20240105" and full ISO close-time stamps such as
+        # "2024-01-05T15:00:00+08:00" all compare cleanly against YYYYMMDD bounds.
+        # Stored values themselves are returned unmodified. (Plain replace(), not
+        # regexp_replace(): the latter substitutes only the first match.)
+        date_expr = f"replace(substr({_quote_identifier(schema.date_field)}, 1, 10), '-', '')"
         if start_date:
-            clauses.append(f"{quoted_date} >= ?")
+            clauses.append(f"{date_expr} >= ?")
             params.append(start_date)
         if end_date:
-            clauses.append(f"{quoted_date} <= ?")
+            clauses.append(f"{date_expr} <= ?")
             params.append(end_date)
 
     if not clauses:
@@ -210,7 +215,9 @@ def query_table(
     try:
         import duckdb
     except ImportError as exc:
-        raise ImportError("DuckDB query support requires duckdb. Install it with `pip install duckdb`.") from exc
+        raise ImportError(
+            "DuckDB query support requires duckdb. Install it with `pip install duckdb`."
+        ) from exc
 
     schema = get_schema(table)
     selected_fields = tuple(fields) if fields else schema.field_names

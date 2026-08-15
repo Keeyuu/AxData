@@ -200,8 +200,8 @@ def test_list_dataset_descriptors_returns_declared_scan_and_core_datasets(tmp_pa
     assert descriptors["demo.symbols"].paths == (scan_dir.resolve(),)
     assert descriptors["demo.symbols"].columns == ("symbol", "name")
     assert "daily" in descriptors
-    assert descriptors["daily"].primary_key == ("ts_code", "trade_date")
-    assert descriptors["daily"].date_field == "trade_date"
+    assert descriptors["daily"].primary_key == ("instrument_id", "trade_time", "period")
+    assert descriptors["daily"].date_field == "trade_time"
     assert descriptors["daily"].paths == ()
 
 
@@ -344,20 +344,20 @@ def test_declared_schema_wins_over_actual_parquet_columns(tmp_path) -> None:
 
 def test_core_schema_table_gets_compat_descriptor(tmp_path) -> None:
     data_root = tmp_path / "data"
-    partition = data_root / "core" / "table=daily" / "trade_date=20240102"
+    partition = data_root / "core" / "table=daily" / "trade_time=20240102"
     partition.mkdir(parents=True)
-    pd.DataFrame([{"ts_code": "000001.SZ", "open": 10.0, "close": 10.2}]).to_parquet(
-        partition / "part-0.parquet", engine="pyarrow", index=False
-    )
+    pd.DataFrame(
+        [{"instrument_id": "000001.SZ", "open": 10.0, "close": 10.2, "period": "day"}]
+    ).to_parquet(partition / "part-0.parquet", engine="pyarrow", index=False)
 
     descriptor = get_dataset_descriptor("daily", data_root=data_root)
 
     assert descriptor.layer == "core"
     assert descriptor.format == "parquet"
-    assert descriptor.primary_key == ("ts_code", "trade_date")
-    assert descriptor.date_field == "trade_date"
+    assert descriptor.primary_key == ("instrument_id", "trade_time", "period")
+    assert descriptor.date_field == "trade_time"
     assert descriptor.paths == ((data_root / "core" / "table=daily").resolve(),)
-    assert {"ts_code", "open", "close", "trade_date"} <= set(descriptor.columns)
+    assert {"instrument_id", "open", "close", "period", "trade_time"} <= set(descriptor.columns)
 
 
 def test_data_browser_lists_dynamic_plugin_dataset(tmp_path) -> None:

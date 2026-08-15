@@ -33,7 +33,10 @@ BUILTIN_GENERIC_INTERFACE_NAMES = {
     "stock_basic_info_exchange",
 }
 sys.path.insert(0, str(TDX_PACKAGE_ROOT / "src"))
-from tests.tdx_plugin_helpers import build_registry_with_local_tdx_plugins, ensure_local_tdx_plugin_paths
+from tests.tdx_plugin_helpers import (
+    build_registry_with_local_tdx_plugins,
+    ensure_local_tdx_plugin_paths,
+)
 
 from axdata_core import SourceRequestResult, get_downloader_profile, list_downloader_profiles
 from axdata_core import downloaders as downloaders_module
@@ -406,19 +409,19 @@ def test_downloader_profile_projects_resolved_provider_manifest(monkeypatch, tmp
             version="0.1.0",
         ),
         interfaces=(
-                InterfaceSpec(
-                    name="stock_codes_tdx",
-                    display_name_zh="运行时股票列表",
-                    source_code="runtime_demo",
-                    source_name_zh="运行时示例",
-                    asset_class="stock",
-                    collection=InterfaceCollectionSpec(
-                        supported=True,
-                        default_profile="runtime_demo.stock_codes.snapshot",
-                    ),
+            InterfaceSpec(
+                name="stock_codes_tdx",
+                display_name_zh="运行时股票列表",
+                source_code="runtime_demo",
+                source_name_zh="运行时示例",
+                asset_class="stock",
+                collection=InterfaceCollectionSpec(
+                    supported=True,
+                    default_profile="runtime_demo.stock_codes.snapshot",
                 ),
             ),
-            downloaders=(
+        ),
+        downloaders=(
             PluginDownloaderProfile(
                 name="runtime_demo.stock_codes.snapshot",
                 interface_name="stock_codes_tdx",
@@ -499,7 +502,10 @@ def test_builtin_generic_downloader_profiles_are_registered_without_tdx(tmp_path
 
     data_root = tmp_path / "data"
     disable_provider(TDX_PROVIDER_ID, data_root=data_root)
-    profiles = {profile["interface_name"]: profile for profile in list_downloader_profiles(data_root=data_root)}
+    profiles = {
+        profile["interface_name"]: profile
+        for profile in list_downloader_profiles(data_root=data_root)
+    }
 
     assert set(profiles) == BUILTIN_GENERIC_INTERFACE_NAMES
     historical_list = get_downloader_profile("stock_historical_list_exchange", data_root=data_root)
@@ -513,8 +519,15 @@ def test_builtin_generic_downloader_profiles_are_registered_without_tdx(tmp_path
     assert historical_list.supported_formats == ["parquet", "csv", "jsonl"]
     assert historical_list.default_connection_mode == "long_connection"
     assert historical_list.default_connection_count == 1
-    assert historical_list.default_output_path_parts == ["交易所", "基础数据", "stock_historical_list_exchange"]
-    assert historical_list.manifest_output["file_name_template"] == "{interface_name}_{data_date}_{run_time}"
+    assert historical_list.default_output_path_parts == [
+        "交易所",
+        "基础数据",
+        "stock_historical_list_exchange",
+    ]
+    assert (
+        historical_list.manifest_output["file_name_template"]
+        == "{interface_name}_{data_date}_{run_time}"
+    )
 
     stock_basic = profiles["stock_basic_info_exchange"]
     assert stock_basic["provider_id"] == "axdata.source.exchange"
@@ -528,7 +541,9 @@ def test_builtin_generic_downloader_profiles_are_registered_without_tdx(tmp_path
 def test_builtin_generic_downloader_writes_formats_and_duckdb_can_read(monkeypatch, tmp_path):
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -603,15 +618,22 @@ def test_builtin_generic_downloader_writes_formats_and_duckdb_can_read(monkeypat
     assert parquet_path.is_file()
     assert csv_path.is_file()
     assert jsonl_path.is_file()
-    assert parquet_path.parent == tmp_path / "out" / "交易所" / "基础数据" / "stock_historical_list_exchange" / "parquet"
+    assert (
+        parquet_path.parent
+        == tmp_path / "out" / "交易所" / "基础数据" / "stock_historical_list_exchange" / "parquet"
+    )
     assert Path(result["log_path"]).is_file()
 
     import duckdb
 
-    rows = duckdb.connect(database=":memory:").execute(
-        "SELECT instrument_id, name FROM read_parquet(?)",
-        [str(parquet_path)],
-    ).fetchall()
+    rows = (
+        duckdb.connect(database=":memory:")
+        .execute(
+            "SELECT instrument_id, name FROM read_parquet(?)",
+            [str(parquet_path)],
+        )
+        .fetchall()
+    )
     assert rows == [("000001.SZ", "平安银行")]
 
 
@@ -631,9 +653,11 @@ def test_download_writer_writes_duckdb_output(tmp_path):
     assert output_path.is_file()
     import duckdb
 
-    rows = duckdb.connect(str(output_path)).execute(
-        "SELECT ts_code, adj_factor FROM data ORDER BY ts_code"
-    ).fetchall()
+    rows = (
+        duckdb.connect(str(output_path))
+        .execute("SELECT ts_code, adj_factor FROM data ORDER BY ts_code")
+        .fetchall()
+    )
     assert rows == [("000001.SZ", 1.0), ("600000.SH", 0.99)]
 
 
@@ -677,7 +701,11 @@ def test_plugin_declared_downloader_without_builtin_profile_can_run(monkeypatch,
                     "retry_count": 2,
                     "timeout_ms": 12000,
                 },
-                default_limits={"max_connections_total": 6, "request_interval_ms": 100, "max_retries": 2},
+                default_limits={
+                    "max_connections_total": 6,
+                    "request_interval_ms": 100,
+                    "max_retries": 2,
+                },
                 output={
                     "default_dir_name": "generic_snapshot_demo",
                     "file_name_template": "{interface_name}_{data_date}_{run_time}",
@@ -701,7 +729,9 @@ def test_plugin_declared_downloader_without_builtin_profile_can_run(monkeypatch,
 
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -740,7 +770,10 @@ def test_plugin_declared_downloader_without_builtin_profile_can_run(monkeypatch,
     assert result["status"] == "success"
     assert result["output_formats"] == ["jsonl"]
     output_path = Path(result["output_path"])
-    assert output_path.parent == tmp_path / "out" / "通用示例" / "staging" / "generic_snapshot_demo" / "jsonl"
+    assert (
+        output_path.parent
+        == tmp_path / "out" / "通用示例" / "staging" / "generic_snapshot_demo" / "jsonl"
+    )
     assert output_path.name.startswith("generic_snapshot_demo_20260620_")
     assert output_path.name.endswith(".jsonl")
     assert calls == [
@@ -829,7 +862,12 @@ def test_stock_daily_share_downloader_profile_is_registered():
     assert profile.concurrency.batch_size_editable is False
     assert profile.params is not None
     assert profile.params[0][0] == "scope"
-    assert profile.params[1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
+    assert profile.params[1] == [
+        "code",
+        "string/list",
+        "否",
+        "证券代码：可选；不填则按股票范围拉取全量",
+    ]
 
 
 def test_stock_capital_changes_downloader_profile_is_registered():
@@ -1069,9 +1107,7 @@ def test_downloader_engine_writer_quality_and_metadata_are_source_neutral(tmp_pa
         DownloadWriter,
     )
 
-    frame = pd.DataFrame.from_records(
-        [{"instrument_id": "000001.SZ", "name": "平安银行"}]
-    )
+    frame = pd.DataFrame.from_records([{"instrument_id": "000001.SZ", "name": "平安银行"}])
     output_dir = tmp_path / "out"
     writer = DownloadWriter()
     quality = DownloadQualityChecker()
@@ -1133,7 +1169,11 @@ def test_downloader_engine_upsert_by_key_rewrites_existing_parquet_without_dupli
         date_field="trade_date",
     )
 
-    rows = pd.read_parquet(output_path, engine="pyarrow").sort_values("ts_code").to_dict(orient="records")
+    rows = (
+        pd.read_parquet(output_path, engine="pyarrow")
+        .sort_values("ts_code")
+        .to_dict(orient="records")
+    )
     assert rows == [
         {"ts_code": "000001.SZ", "trade_date": "20240102", "close": 10.8},
         {"ts_code": "000002.SZ", "trade_date": "20240102", "close": 20.0},
@@ -1162,9 +1202,9 @@ def test_downloader_engine_upsert_by_key_removes_stale_partition_rows(tmp_path):
     output_dir = tmp_path / "adj_factor"
     stale_partition = output_dir / "trade_date=20240102"
     stale_partition.mkdir(parents=True)
-    pd.DataFrame.from_records(
-        [{"ts_code": "000001.SZ", "adj_factor": 1.0}]
-    ).to_parquet(stale_partition / "part-0.parquet", engine="pyarrow", index=False)
+    pd.DataFrame.from_records([{"ts_code": "000001.SZ", "adj_factor": 1.0}]).to_parquet(
+        stale_partition / "part-0.parquet", engine="pyarrow", index=False
+    )
 
     metadata = writer.write_parquet_with_mode(
         pd.DataFrame.from_records(
@@ -1227,7 +1267,11 @@ def test_downloader_engine_replace_range_replaces_only_target_dates(tmp_path):
         date_field="trade_date",
     )
 
-    rows = pd.read_parquet(output_path, engine="pyarrow").sort_values("trade_date").to_dict(orient="records")
+    rows = (
+        pd.read_parquet(output_path, engine="pyarrow")
+        .sort_values("trade_date")
+        .to_dict(orient="records")
+    )
     assert rows == [
         {"ts_code": "000001.SZ", "trade_date": "20240102", "close": 10.0},
         {"ts_code": "000001.SZ", "trade_date": "20240103", "close": 11.8},
@@ -1300,12 +1344,16 @@ def test_downloader_engine_overwrite_partition_replaces_only_touched_partition(t
     old_file = output_dir / "20240102.parquet"
     keep_file = output_dir / "20240103.parquet"
     output_dir.mkdir(parents=True)
-    pd.DataFrame.from_records([{"ts_code": "old", "trade_date": "20240102", "close": 1.0}]).to_parquet(
+    pd.DataFrame.from_records(
+        [{"ts_code": "old", "trade_date": "20240102", "close": 1.0}]
+    ).to_parquet(
         old_file,
         engine="pyarrow",
         index=False,
     )
-    pd.DataFrame.from_records([{"ts_code": "keep", "trade_date": "20240103", "close": 2.0}]).to_parquet(
+    pd.DataFrame.from_records(
+        [{"ts_code": "keep", "trade_date": "20240103", "close": 2.0}]
+    ).to_parquet(
         keep_file,
         engine="pyarrow",
         index=False,
@@ -1535,9 +1583,7 @@ def test_downloader_engine_quality_warns_when_calendar_is_missing():
     checker = DownloadQualityChecker()
 
     quality = checker.evaluate(
-        pd.DataFrame.from_records(
-            [{"ts_code": "000001.SZ", "trade_date": "20240102"}]
-        ),
+        pd.DataFrame.from_records([{"ts_code": "000001.SZ", "trade_date": "20240102"}]),
         primary_key=("ts_code", "trade_date"),
         date_field="trade_date",
         calendar_check=True,
@@ -1601,7 +1647,9 @@ def test_run_downloader_uses_engine_writer_quality_and_metadata(tmp_path, monkey
     calls = []
 
     class FakeWriter:
-        def write_outputs(self, profile, frame, *, output_dir, file_stem, formats, progress_callback=None):
+        def write_outputs(
+            self, profile, frame, *, output_dir, file_stem, formats, progress_callback=None
+        ):
             calls.append(
                 {
                     "component": "writer",
@@ -1659,7 +1707,9 @@ def test_run_downloader_uses_engine_writer_quality_and_metadata(tmp_path, monkey
             )
             return tmp_path / "engine-log.json"
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_codes_tdx"
         assert adapter is fake_adapter
         assert persist is False
@@ -1693,7 +1743,9 @@ def test_run_downloader_uses_engine_writer_quality_and_metadata(tmp_path, monkey
 
 
 def test_tdx_downloader_profile_declares_runtime_factories(monkeypatch):
-    monkeypatch.setattr(downloaders_module, "_registry_downloader_projections", lambda *, data_root=None: None)
+    monkeypatch.setattr(
+        downloaders_module, "_registry_downloader_projections", lambda *, data_root=None: None
+    )
 
     profile = get_downloader_profile("stock_codes_tdx")
 
@@ -1709,7 +1761,9 @@ def test_downloader_uses_declared_adapter_factory(tmp_path, monkeypatch):
     fake_client = object()
     calls = []
 
-    def fake_download_adapter(profile, *, source_server_count, pool_size, data_root=None, progress_callback=None):
+    def fake_download_adapter(
+        profile, *, source_server_count, pool_size, data_root=None, progress_callback=None
+    ):
         calls.append(
             {
                 "profile": profile.interface_name,
@@ -1721,7 +1775,9 @@ def test_downloader_uses_declared_adapter_factory(tmp_path, monkeypatch):
         )
         return fake_adapter, fake_client
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_codes_tdx"
         assert adapter is fake_adapter
         assert data_root == tmp_path
@@ -1809,7 +1865,9 @@ def test_runtime_source_server_max_factory_can_be_registered(tmp_path, monkeypat
     calls = []
 
     def fake_registry():
-        def demo_factory(interface_name, *, configured_max, source_server_count_editable, data_root=None):
+        def demo_factory(
+            interface_name, *, configured_max, source_server_count_editable, data_root=None
+        ):
             calls.append(
                 {
                     "interface_name": interface_name,
@@ -2113,7 +2171,9 @@ def test_tdx_downloader_registry_import_does_not_load_runtime_modules():
 def test_stock_codes_downloader_writes_selected_formats(tmp_path, monkeypatch):
     fake_adapter = object()
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_codes_tdx"
         assert params == {"scope": "all"}
         assert fields is None
@@ -2200,7 +2260,9 @@ def test_stock_codes_downloader_writes_selected_formats(tmp_path, monkeypatch):
 def test_stock_st_list_downloader_writes_snapshot(tmp_path, monkeypatch):
     fake_adapter = object()
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_st_list_tdx"
         assert params == {"scope": "all"}
         assert fields is None
@@ -2245,7 +2307,9 @@ def test_stock_st_list_downloader_writes_snapshot(tmp_path, monkeypatch):
     assert result["snapshot_date_source"] == "snapshot_date"
     assert result["file_stem"] == f"stock_st_list_tdx_{result['collection_time']}"
     assert result["output_path"].startswith(
-        str(tmp_path / "data" / "通达信" / "股票数据" / "基础数据" / "stock_st_list_tdx" / "parquet")
+        str(
+            tmp_path / "data" / "通达信" / "股票数据" / "基础数据" / "stock_st_list_tdx" / "parquet"
+        )
     )
     assert set(result["output_paths"]) == {"parquet", "csv"}
     assert result["quality"]["primary_key"] == "pass"
@@ -2254,7 +2318,9 @@ def test_stock_st_list_downloader_writes_snapshot(tmp_path, monkeypatch):
 def test_stock_suspensions_downloader_writes_snapshot(tmp_path, monkeypatch):
     fake_adapter = object()
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_suspensions_tdx"
         assert params == {"scope": "all"}
         assert fields is None
@@ -2297,17 +2363,29 @@ def test_stock_suspensions_downloader_writes_snapshot(tmp_path, monkeypatch):
     assert result["snapshot_date_source"] == "snapshot_date"
     assert result["file_stem"] == f"stock_suspensions_tdx_{result['collection_time']}"
     assert result["output_path"].startswith(
-        str(tmp_path / "data" / "通达信" / "股票数据" / "基础数据" / "stock_suspensions_tdx" / "parquet")
+        str(
+            tmp_path
+            / "data"
+            / "通达信"
+            / "股票数据"
+            / "基础数据"
+            / "stock_suspensions_tdx"
+            / "parquet"
+        )
     )
     assert set(result["output_paths"]) == {"parquet", "jsonl"}
     assert result["quality"]["primary_key"] == "pass"
 
 
-def test_stock_daily_share_downloader_delegates_full_scope_to_interface_and_writes_snapshot(tmp_path, monkeypatch):
+def test_stock_daily_share_downloader_delegates_full_scope_to_interface_and_writes_snapshot(
+    tmp_path, monkeypatch
+):
     fake_adapter = object()
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -2367,7 +2445,15 @@ def test_stock_daily_share_downloader_delegates_full_scope_to_interface_and_writ
     assert result["snapshot_date_source"] == "tdx_stats_date"
     assert result["file_stem"] == "stock_daily_share_tdx_20260620"
     assert result["output_path"].startswith(
-        str(tmp_path / "data" / "通达信" / "股票数据" / "基础数据" / "stock_daily_share_tdx" / "parquet")
+        str(
+            tmp_path
+            / "data"
+            / "通达信"
+            / "股票数据"
+            / "基础数据"
+            / "stock_daily_share_tdx"
+            / "parquet"
+        )
     )
     assert result["output_path"].endswith("stock_daily_share_tdx_20260620.parquet")
     assert result["quality"]["primary_key"] == "pass"
@@ -2383,7 +2469,9 @@ def test_stock_capital_changes_downloader_delegates_full_scope_to_interface_and_
     fake_adapter = object()
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -2470,7 +2558,9 @@ def test_stock_kline_daily_downloader_writes_core_sample_and_duckdb_can_read(tmp
     _write_trade_calendar(data_root, ["20260617", "20260618"])
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -2563,10 +2653,14 @@ def test_stock_kline_daily_downloader_writes_core_sample_and_duckdb_can_read(tmp
 
     import duckdb
 
-    rows = duckdb.connect(database=":memory:").execute(
-        "SELECT instrument_id, close FROM read_parquet(?) ORDER BY trade_time",
-        [result["output_paths"]["parquet"]],
-    ).fetchall()
+    rows = (
+        duckdb.connect(database=":memory:")
+        .execute(
+            "SELECT instrument_id, close FROM read_parquet(?) ORDER BY trade_time",
+            [result["output_paths"]["parquet"]],
+        )
+        .fetchall()
+    )
     assert rows == [("000001.SZ", 10.2), ("000001.SZ", 10.3)]
 
 
@@ -2575,7 +2669,9 @@ def test_stock_adj_factor_downloader_writes_core_sample_and_duckdb_can_read(tmp_
     data_root = tmp_path / "data"
     _write_trade_calendar(data_root, ["20260617", "20260618"])
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_adj_factor_tdx"
         assert params == {"code": "000001.SZ", "adjust": "qfq"}
         assert fields == get_downloader_profile("stock_adj_factor_tdx").default_fields
@@ -2632,19 +2728,21 @@ def test_stock_adj_factor_downloader_writes_core_sample_and_duckdb_can_read(tmp_
     assert result["partitions_touched"] == ["trade_date=20260617", "trade_date=20260618"]
     assert result["quality"]["write_mode"] == "upsert_by_key"
     assert result["quality"]["rows_after"] == 2
-    assert result["output_path"] == str(
-        data_root / "core" / "table=adj_factor" / "parquet"
-    )
+    assert result["output_path"] == str(data_root / "core" / "table=adj_factor" / "parquet")
     assert set(result["output_paths"]) == {"parquet", "csv", "jsonl"}
     assert (Path(result["output_paths"]["parquet"]) / "20260617.parquet").is_file()
     assert (Path(result["output_paths"]["parquet"]) / "20260618.parquet").is_file()
 
     import duckdb
 
-    rows = duckdb.connect(database=":memory:").execute(
-        "SELECT ts_code, trade_date, adj_factor FROM read_parquet(?, hive_partitioning = true) ORDER BY trade_date",
-        [str(Path(result["output_paths"]["parquet"]) / "**" / "*.parquet")],
-    ).fetchall()
+    rows = (
+        duckdb.connect(database=":memory:")
+        .execute(
+            "SELECT ts_code, trade_date, adj_factor FROM read_parquet(?, hive_partitioning = true) ORDER BY trade_date",
+            [str(Path(result["output_paths"]["parquet"]) / "**" / "*.parquet")],
+        )
+        .fetchall()
+    )
     assert rows == [("000001.SZ", "20260617", 0.98), ("000001.SZ", "20260618", 1.0)]
 
 
@@ -2695,10 +2793,14 @@ def test_stock_adj_factor_downloader_upsert_by_key_rerun_does_not_duplicate(tmp_
         ],
     ]
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_adj_factor_tdx"
         rows = payloads.pop(0)
-        return SourceRequestResult(records=rows, meta={"source": "tdx", "trade_date": rows[-1]["trade_date"]})
+        return SourceRequestResult(
+            records=rows, meta={"source": "tdx", "trade_date": rows[-1]["trade_date"]}
+        )
 
     monkeypatch.setattr(downloaders_module, "request_interface", fake_request_interface)
 
@@ -2729,10 +2831,14 @@ def test_stock_adj_factor_downloader_upsert_by_key_rerun_does_not_duplicate(tmp_
 
     import duckdb
 
-    rows = duckdb.connect(database=":memory:").execute(
-        "SELECT ts_code, trade_date, adj_factor FROM read_parquet(?, hive_partitioning = true) ORDER BY trade_date",
-        [str(Path(second["output_paths"]["parquet"]) / "**" / "*.parquet")],
-    ).fetchall()
+    rows = (
+        duckdb.connect(database=":memory:")
+        .execute(
+            "SELECT ts_code, trade_date, adj_factor FROM read_parquet(?, hive_partitioning = true) ORDER BY trade_date",
+            [str(Path(second["output_paths"]["parquet"]) / "**" / "*.parquet")],
+        )
+        .fetchall()
+    )
     assert rows == [
         ("000001.SZ", "20260617", 0.98),
         ("000001.SZ", "20260618", 1.01),
@@ -2743,7 +2849,9 @@ def test_stock_adj_factor_downloader_upsert_by_key_rerun_does_not_duplicate(tmp_
 def test_stock_adj_factor_downloader_warns_without_local_trade_calendar(tmp_path, monkeypatch):
     fake_adapter = object()
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         assert interface_name == "stock_adj_factor_tdx"
         assert persist is False
         assert adapter is fake_adapter
@@ -2784,7 +2892,9 @@ def test_stock_limit_ladder_downloader_delegates_to_interface_and_writes_shortli
     fake_adapter = object()
     calls = []
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         calls.append(
             {
                 "interface_name": interface_name,
@@ -2851,7 +2961,15 @@ def test_stock_limit_ladder_downloader_delegates_to_interface_and_writes_shortli
     assert result["snapshot_date_source"] == "record_trade_date"
     assert result["file_stem"] == f"stock_limit_ladder_tdx_{result['collection_time']}"
     assert result["output_path"].startswith(
-        str(tmp_path / "data" / "通达信" / "股票数据" / "短线数据" / "stock_limit_ladder_tdx" / "parquet")
+        str(
+            tmp_path
+            / "data"
+            / "通达信"
+            / "股票数据"
+            / "短线数据"
+            / "stock_limit_ladder_tdx"
+            / "parquet"
+        )
     )
     assert result["output_path"].endswith(f"{result['file_stem']}.parquet")
     assert set(result["output_paths"]) == {"parquet", "jsonl"}
@@ -2933,12 +3051,18 @@ def test_tdx_download_adapter_uses_selected_servers_and_connections(monkeypatch,
     assert "first_same_client=True" in result.stdout
     assert "first_parallel=False" in result.stdout
     assert f"first_server_cache_root={server_cache_root}" in result.stdout
-    assert "first_created={'hosts': ['host1:7709', 'host2:7709'], 'pool_size': 6, 'heartbeat_interval': None}" in result.stdout
+    assert (
+        "first_created={'hosts': ['host1:7709', 'host2:7709'], 'pool_size': 6, 'heartbeat_interval': None}"
+        in result.stdout
+    )
     assert f"first_cache_root={server_cache_root}" in result.stdout
     assert "second_same_client=True" in result.stdout
     assert "second_parallel=True" in result.stdout
     assert "second_options=None" in result.stdout
-    assert "second_created={'hosts': ['host1:7709', 'host2:7709', 'host3:7709', 'host4:7709'], 'pool_size': 8, 'heartbeat_interval': None}" in result.stdout
+    assert (
+        "second_created={'hosts': ['host1:7709', 'host2:7709', 'host3:7709', 'host4:7709'], 'pool_size': 8, 'heartbeat_interval': None}"
+        in result.stdout
+    )
     assert f"ladder_server_cache_root={server_cache_root}" in result.stdout
     assert f"ladder_stats_cache_root={stats_cache_root}" in result.stdout
     assert "ladder_topic_workers=6" in result.stdout
@@ -3075,15 +3199,15 @@ def test_tdx_downloader_module_import_does_not_load_request_module():
         "import sys\n"
         "import axdata_core.adapters.tdx.downloader as downloader\n"
         "tracked = [\n"
-            "    'axdata_core.adapters.tdx.request',\n"
-            "    'axdata_core.adapters.tdx.downloader_profiles',\n"
-            "    'axdata_core.adapters.tdx.client_factory',\n"
-            "    'axdata_core.adapters.tdx.host_config',\n"
-            "    'axdata_core.adapters.tdx.f10_request',\n"
-            "    'axdata_core.adapters.tdx.tqlex',\n"
-            "    'axdata_core.tdx_f10_specs',\n"
-            "    'axdata_core.tdx_server_config',\n"
-            "    'axdata_core.source_request',\n"
+        "    'axdata_core.adapters.tdx.request',\n"
+        "    'axdata_core.adapters.tdx.downloader_profiles',\n"
+        "    'axdata_core.adapters.tdx.client_factory',\n"
+        "    'axdata_core.adapters.tdx.host_config',\n"
+        "    'axdata_core.adapters.tdx.f10_request',\n"
+        "    'axdata_core.adapters.tdx.tqlex',\n"
+        "    'axdata_core.tdx_f10_specs',\n"
+        "    'axdata_core.tdx_server_config',\n"
+        "    'axdata_core.source_request',\n"
         "]\n"
         "print('loaded_before=' + ','.join(name for name in tracked if name in sys.modules))\n"
         "print('request_before=' + str('axdata_core.adapters.tdx.request' in sys.modules))\n"
@@ -3123,7 +3247,9 @@ def test_stock_daily_share_concurrency_is_fixed_recommended_default(monkeypatch)
 
     monkeypatch.setattr(
         "axdata_core.tdx_server_config.effective_host_strings",
-        lambda kind, *, cache_root=None: ["host1:7709", "host2:7709", "host3:7709"] if kind == "quote" else [],
+        lambda kind, *, cache_root=None: (
+            ["host1:7709", "host2:7709", "host3:7709"] if kind == "quote" else []
+        ),
     )
 
     resolved = downloaders_module._normalize_concurrency(
@@ -3148,7 +3274,9 @@ def test_stock_daily_share_concurrency_is_fixed_recommended_default(monkeypatch)
 def test_stock_codes_downloader_uses_menu_directory_when_only_root_is_set(tmp_path, monkeypatch):
     fake_adapter = object()
 
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
+    def fake_request_interface(
+        interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None
+    ):
         return SourceRequestResult(
             records=[{"instrument_id": "000001.SZ", "symbol": "000001", "name": "平安银行"}],
             meta={"source": "tdx"},

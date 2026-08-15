@@ -4,12 +4,10 @@ import json
 from pathlib import Path
 
 import pandas as pd
-
 from axdata_core.collector_scheduler import CollectorSchedulerService
 from axdata_core.plugins import (
     CollectorSpec,
     DownloaderMode,
-    DownloaderProfile as PluginDownloaderProfile,
     FieldSpec,
     FieldType,
     InterfaceCollectionSpec,
@@ -21,38 +19,52 @@ from axdata_core.plugins import (
     ProviderManifest,
     SourceResult,
 )
+from axdata_core.plugins import (
+    DownloaderProfile as PluginDownloaderProfile,
+)
 from axdata_core.provider_registry import ProviderRegistry
 from axdata_core.schema import get_schema, normalize_table_name
 from axdata_core.storage import core_table_partition_path
-
 
 CORE_LOOP_MAPPING = {
     "stock_basic": {
         "table": "stock_basic_exchange",
         "source_interfaces": ("stock_codes_tdx", "stock_basic_info_exchange"),
         "downloader_profiles": ("stock_codes_tdx.snapshot", "stock_basic_info_exchange.snapshot"),
-        "collector_status": "TDX source snapshot and exchange lightweight CollectorSpec exist; production core rebuild still pending",
+        "collector_status": (
+            "TDX source snapshot and exchange lightweight CollectorSpec exist; "
+            "production core rebuild still pending"
+        ),
         "storage_path": "data/core/table=stock_basic_exchange/*.parquet",
     },
     "trade_cal": {
         "table": "trade_cal",
         "source_interfaces": ("stock_trade_calendar_exchange",),
         "downloader_profiles": ("stock_trade_calendar_exchange.snapshot",),
-        "collector_status": "exchange lightweight CollectorSpec exists; production calendar scheduling still pending",
+        "collector_status": (
+            "exchange lightweight CollectorSpec exists; "
+            "production calendar scheduling still pending"
+        ),
         "storage_path": "data/core/table=trade_cal/exchange=SSE/*.parquet",
     },
     "daily": {
         "table": "daily",
         "source_interfaces": ("stock_kline_daily_tdx",),
         "downloader_profiles": ("stock_kline_daily_tdx.snapshot",),
-        "collector_status": "TDX lightweight CollectorSpec exists for explicit code samples; production all-market core conversion still pending",
+        "collector_status": (
+            "TDX lightweight CollectorSpec exists for explicit code samples; "
+            "production all-market core conversion still pending"
+        ),
         "storage_path": "data/core/table=daily/parquet/YYYYMMDD.parquet",
     },
     "adj_factor": {
         "table": "adj_factor",
         "source_interfaces": ("stock_adj_factor_tdx",),
         "downloader_profiles": ("stock_adj_factor_tdx.snapshot",),
-        "collector_status": "TDX lightweight CollectorSpec exists for explicit code samples; production all-market core conversion still pending",
+        "collector_status": (
+            "TDX lightweight CollectorSpec exists for explicit code samples; "
+            "production all-market core conversion still pending"
+        ),
         "storage_path": "data/core/table=adj_factor/parquet/YYYYMMDD.parquet",
     },
 }
@@ -71,29 +83,31 @@ class _LoopAdapter:
         return SourceResult(
             data=(
                 {
-                    "ts_code": "000001.SZ",
-                    "trade_date": "20240102",
+                    "instrument_id": "000001.SZ",
+                    "symbol": "000001",
+                    "tdx_code": "sz000001",
+                    "exchange": "SZSE",
+                    "trade_time": "20240102",
+                    "period": "day",
                     "open": 10.0,
                     "high": 10.5,
                     "low": 9.8,
                     "close": 10.2,
-                    "pre_close": 10.0,
-                    "change": 0.2,
-                    "pct_chg": 2.0,
-                    "vol": 1000.0,
+                    "volume": 1000.0,
                     "amount": 10200.0,
                 },
                 {
-                    "ts_code": "000002.SZ",
-                    "trade_date": "20240102",
+                    "instrument_id": "000002.SZ",
+                    "symbol": "000002",
+                    "tdx_code": "sz000002",
+                    "exchange": "SZSE",
+                    "trade_time": "20240102",
+                    "period": "day",
                     "open": 20.0,
                     "high": 21.0,
                     "low": 19.5,
                     "close": 20.5,
-                    "pre_close": 20.0,
-                    "change": 0.5,
-                    "pct_chg": 2.5,
-                    "vol": 2000.0,
+                    "volume": 2000.0,
                     "amount": 41000.0,
                 },
             ),
@@ -137,8 +151,8 @@ def _loop_provider_manifest() -> ProviderManifest:
                 ),
                 parameters=(
                     ParameterSpec(
-                        name="trade_date",
-                        display_name_zh="Trade date",
+                        name="trade_time",
+                        display_name_zh="Trade time",
                         type=ParameterType.STRING.value,
                         required=True,
                     ),
@@ -147,7 +161,9 @@ def _loop_provider_manifest() -> ProviderManifest:
                     FieldSpec(
                         name=field.name,
                         display_name_zh=field.description_zh or field.name,
-                    type=FieldType.NUMBER.value if field.dtype == "float64" else FieldType.STRING.value,
+                        type=FieldType.NUMBER.value
+                        if field.dtype == "float64"
+                        else FieldType.STRING.value,
                         required=not field.nullable,
                     )
                     for field in daily_fields
@@ -162,7 +178,7 @@ def _loop_provider_manifest() -> ProviderManifest:
                 resource_group="loop_demo.core",
                 mode=DownloaderMode.SNAPSHOT.value,
                 default_options={
-                    "params": {"trade_date": "20240102"},
+                    "params": {"trade_time": "20240102"},
                     "fields": [field.name for field in daily_fields],
                     "formats": ["parquet"],
                 },
@@ -172,11 +188,18 @@ def _loop_provider_manifest() -> ProviderManifest:
                     "file_name_template": "{interface_name}_{data_date}_{run_time}",
                     "supported_formats": ["parquet", "csv", "jsonl"],
                     "output_layer": "core",
-                    "primary_key": ["ts_code", "trade_date"],
-                    "required_columns": ["ts_code", "trade_date"],
+                    "primary_key": ["instrument_id", "trade_time", "period"],
+                    "required_columns": ["instrument_id", "trade_time", "period"],
                     "expected_columns": [field.name for field in daily_fields],
-                    "date_field": "trade_date",
-                    "numeric_positive_columns": ["open", "high", "low", "close", "vol", "amount"],
+                    "date_field": "trade_time",
+                    "numeric_positive_columns": [
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                        "amount",
+                    ],
                 },
             ),
         ),
@@ -201,7 +224,7 @@ def _loop_collector_manifest() -> ProviderManifest:
                 required_interfaces=("daily",),
                 downloader_profile="loop_demo.daily.snapshot",
                 resource_group="loop_demo.core",
-                default_params={"trade_date": "20240102"},
+                default_params={"trade_time": "20240102"},
                 output={"layer": "core", "formats": ["parquet", "csv", "jsonl"]},
             ),
         ),
@@ -232,18 +255,24 @@ def test_core_loop_mapping_documents_current_interfaces_and_gaps() -> None:
         assert schema.name == mapping["table"]
         assert mapping["source_interfaces"]
         assert mapping["storage_path"].startswith(f"data/core/table={mapping['table']}")
-        if core_name in {"daily", "adj_factor"}:
+        if core_name == "daily":
+            assert schema.primary_key == ("instrument_id", "trade_time", "period")
+        if core_name == "adj_factor":
             assert schema.primary_key == ("ts_code", "trade_date")
         if core_name == "trade_cal":
             assert schema.primary_key == ("exchange", "cal_date")
 
 
-def test_core_collection_loop_records_run_writes_files_and_query_reads_back(monkeypatch, tmp_path) -> None:
+def test_core_collection_loop_records_run_writes_files_and_query_reads_back(
+    monkeypatch, tmp_path
+) -> None:
     import axdata_core.provider_catalog as provider_catalog
 
     provider = _LoopProvider()
     registry = _loop_registry(provider)
-    monkeypatch.setattr(provider_catalog, "build_builtin_provider_registry", lambda **_kwargs: registry)
+    monkeypatch.setattr(
+        provider_catalog, "build_builtin_provider_registry", lambda **_kwargs: registry
+    )
 
     data_root = tmp_path / "data"
     export_root = tmp_path / "export"
@@ -282,7 +311,7 @@ def test_core_collection_loop_records_run_writes_files_and_query_reads_back(monk
     assert finished.result["downloader_profile"] == "loop_demo.daily.snapshot"
     assert task.downloader_profile == "loop_demo.daily.snapshot"
     assert provider.adapter.calls == [
-        {"interface_name": "daily", "params": {"trade_date": "20240102"}}
+        {"interface_name": "daily", "params": {"trade_time": "20240102"}}
     ]
 
     for path_text in finished.output_paths.values():
@@ -297,23 +326,26 @@ def test_core_collection_loop_records_run_writes_files_and_query_reads_back(monk
     assert log_payload["source_meta"]["sample"] is True
 
     parquet_frame = pd.read_parquet(finished.output_paths["parquet"], engine="pyarrow")
-    core_partition = core_table_partition_path("daily", data_root) / "trade_date=20240102"
+    core_partition = core_table_partition_path("daily", data_root) / "trade_time=20240102"
     core_partition.mkdir(parents=True)
     parquet_frame.to_parquet(core_partition / "part-0.parquet", engine="pyarrow", index=False)
 
     from axdata_core import query_table, read_core_table
 
     saved = read_core_table("daily", root=data_root)
-    assert saved.sort_values("ts_code")["ts_code"].tolist() == ["000001.SZ", "000002.SZ"]
+    assert saved.sort_values("instrument_id")["instrument_id"].tolist() == [
+        "000001.SZ",
+        "000002.SZ",
+    ]
 
     queried = query_table(
         "daily",
         root=data_root,
-        fields=["ts_code", "trade_date", "close"],
-        filters={"ts_code": "000001.SZ"},
+        fields=["instrument_id", "trade_time", "close"],
+        filters={"instrument_id": "000001.SZ"},
         start_date="20240101",
         end_date="20240131",
     )
     assert queried.to_dict(orient="records") == [
-        {"ts_code": "000001.SZ", "trade_date": "20240102", "close": 10.2}
+        {"instrument_id": "000001.SZ", "trade_time": "20240102", "close": 10.2}
     ]

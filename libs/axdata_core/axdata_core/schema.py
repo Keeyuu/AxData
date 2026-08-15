@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Mapping, Tuple
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class Field:
     description: str = ""
     description_zh: str = ""
     unit: str | None = None
-    aliases: Tuple[str, ...] = ()
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -24,8 +24,8 @@ class TableSchema:
     """Table-level schema metadata."""
 
     name: str
-    fields: Tuple[Field, ...]
-    primary_key: Tuple[str, ...]
+    fields: tuple[Field, ...]
+    primary_key: tuple[str, ...]
     date_field: str | None = None
     datetime_field: str | None = None
     description: str = ""
@@ -35,11 +35,11 @@ class TableSchema:
     provider_field_mappings: Mapping[str, str] = field(default_factory=dict)
 
     @property
-    def field_names(self) -> Tuple[str, ...]:
+    def field_names(self) -> tuple[str, ...]:
         return tuple(field.name for field in self.fields)
 
     @property
-    def required_fields(self) -> Tuple[str, ...]:
+    def required_fields(self) -> tuple[str, ...]:
         required = {field.name for field in self.fields if not field.nullable}
         required.update(self.primary_key)
         return tuple(name for name in self.field_names if name in required)
@@ -48,7 +48,7 @@ class TableSchema:
         return name in self.field_names
 
 
-STOCK_BASIC_FIELDS: Tuple[Field, ...] = (
+STOCK_BASIC_FIELDS: tuple[Field, ...] = (
     Field(
         "instrument_id",
         "string",
@@ -220,7 +220,141 @@ STOCK_BASIC_FIELDS: Tuple[Field, ...] = (
 )
 
 
-SCHEMAS: Dict[str, TableSchema] = {
+def _kline_fields(*, index: bool = False) -> tuple[Field, ...]:
+    """Shared TDX kline columns.
+
+    ``trade_time`` is the bar CLOSE time in ISO-8601 with +08:00 (TDX labels
+    bars by close time); ``period`` is part of the primary key so multiple
+    periods coexist in one table. ``>=15m`` periods are synthesized locally
+    from 5m and never stored (plan axdata-integration/18).
+    """
+
+    fields: tuple[Field, ...] = (
+        Field(
+            "instrument_id",
+            "string",
+            nullable=False,
+            aliases=("ts_code",),
+            description="AxData instrument identifier, e.g. 000001.SZ.",
+            description_zh="AxData 统一证券代码，例如 000001.SZ。",
+        ),
+        Field(
+            "symbol",
+            "string",
+            description="Plain symbol without exchange suffix, e.g. 000001.",
+            description_zh="不带交易所后缀的代码，例如 000001。",
+        ),
+        Field(
+            "tdx_code",
+            "string",
+            description="TDX source code, e.g. sz000001.",
+            description_zh="通达信源代码，例如 sz000001。",
+        ),
+        Field(
+            "exchange",
+            "string",
+            description="Exchange code: SSE / SZSE / BSE.",
+            description_zh="交易所代码：SSE / SZSE / BSE。",
+        ),
+        Field(
+            "trade_time",
+            "string",
+            nullable=False,
+            aliases=("trade_date",),
+            description="Bar close time, ISO-8601 with +08:00 offset (close-time labeled).",
+            description_zh="bar 收盘时刻，ISO-8601 含 +08:00 时区（收盘时刻标记）。",
+        ),
+        Field(
+            "period",
+            "string",
+            nullable=False,
+            description="Bar period: day / 1m / 5m (15m+ synthesized locally from 5m).",
+            description_zh="周期：day / 1m / 5m（15m 及以上由 5m 本地合成，不落库）。",
+        ),
+        Field("open", "double", description="Open price.", description_zh="开盘价。"),
+        Field("high", "double", description="High price.", description_zh="最高价。"),
+        Field("low", "double", description="Low price.", description_zh="最低价。"),
+        Field("close", "double", description="Close price.", description_zh="收盘价。"),
+        Field(
+            "volume",
+            "double",
+            aliases=("vol",),
+            description="Bar volume in source (TDX) units.",
+            description_zh="成交量（TDX 源口径）。",
+        ),
+        Field(
+            "amount",
+            "double",
+            description="Bar turnover amount in source (TDX) units.",
+            description_zh="成交额（TDX 源口径）。",
+        ),
+    )
+    if index:
+        fields += (
+            Field(
+                "up_count",
+                "int64",
+                description="Rising member count on index bars.",
+                description_zh="上涨家数（指数 bar）。",
+            ),
+            Field(
+                "down_count",
+                "int64",
+                description="Falling member count on index bars.",
+                description_zh="下跌家数（指数 bar）。",
+            ),
+        )
+    return fields
+
+
+INDEX_CATALOG_FIELDS: tuple[Field, ...] = (
+    Field(
+        "instrument_id",
+        "string",
+        nullable=False,
+        description="AxData index identifier, e.g. 000001.SH.",
+        description_zh="AxData 指数代码，例如 000001.SH。",
+    ),
+    Field(
+        "symbol",
+        "string",
+        description="Plain index symbol without exchange suffix.",
+        description_zh="不带交易所后缀的指数代码。",
+    ),
+    Field(
+        "tdx_code",
+        "string",
+        description="TDX source code, e.g. sh000001.",
+        description_zh="通达信源代码，例如 sh000001。",
+    ),
+    Field(
+        "exchange",
+        "string",
+        description="Exchange code: SSE / SZSE / BSE.",
+        description_zh="交易所代码：SSE / SZSE / BSE。",
+    ),
+    Field(
+        "name",
+        "string",
+        description="Index display name.",
+        description_zh="指数名称。",
+    ),
+    Field(
+        "index_type",
+        "string",
+        description="Index category tag: official_index / tdx_block_index (sector & theme).",
+        description_zh="指数分类标签：official_index（官方）/ tdx_block_index（通达信板块·题材）。",
+    ),
+    Field(
+        "previous_close",
+        "double",
+        description="Previous close captured with the daily directory snapshot.",
+        description_zh="随每日目录快照留痕的昨收。",
+    ),
+)
+
+
+SCHEMAS: dict[str, TableSchema] = {
     "stock_basic_exchange": TableSchema(
         name="stock_basic_exchange",
         primary_key=("instrument_id",),
@@ -269,50 +403,12 @@ SCHEMAS: Dict[str, TableSchema] = {
     ),
     "daily": TableSchema(
         name="daily",
-        primary_key=("ts_code", "trade_date"),
-        date_field="trade_date",
-        description="Daily OHLCV market data.",
-        display_name_zh="日线行情",
+        primary_key=("instrument_id", "trade_time", "period"),
+        date_field="trade_time",
+        description="Daily OHLCV market data (TDX reload, qfq, close-time labeled).",
+        display_name_zh="个股日线行情",
         interface_group="本地数据/股票/行情数据",
-        provider_field_mappings={
-            "instrument_id": "ts_code",
-            "volume": "vol",
-            "trade_time": "trade_date",
-        },
-        fields=(
-            Field(
-                "ts_code",
-                "string",
-                nullable=False,
-                description="AxData stock identifier.",
-                description_zh="AxData 统一证券代码，例如 000001.SZ。",
-                aliases=("instrument_id",),
-            ),
-            Field(
-                "trade_date",
-                "string",
-                nullable=False,
-                description="Trading date in YYYYMMDD format.",
-                description_zh="交易日期，格式为 YYYYMMDD。",
-                aliases=("trade_time",),
-            ),
-            Field("open", "float64", description="Open price.", description_zh="开盘价。", unit="CNY"),
-            Field("high", "float64", description="High price.", description_zh="最高价。", unit="CNY"),
-            Field("low", "float64", description="Low price.", description_zh="最低价。", unit="CNY"),
-            Field("close", "float64", description="Close price.", description_zh="收盘价。", unit="CNY"),
-            Field("pre_close", "float64", description="Previous close price.", description_zh="昨收价。", unit="CNY"),
-            Field("change", "float64", description="Absolute price change.", description_zh="涨跌额。", unit="CNY"),
-            Field("pct_chg", "float64", description="Percentage price change.", description_zh="涨跌幅。", unit="percent"),
-            Field(
-                "vol",
-                "float64",
-                description="Trading volume.",
-                description_zh="成交量，单位：手。",
-                unit="lot",
-                aliases=("volume",),
-            ),
-            Field("amount", "float64", description="Trading amount.", description_zh="成交额，单位：千元。", unit="thousand CNY"),
-        ),
+        fields=_kline_fields(),
     ),
     "adj_factor": TableSchema(
         name="adj_factor",
@@ -346,9 +442,45 @@ SCHEMAS: Dict[str, TableSchema] = {
             ),
         ),
     ),
+    "minute": TableSchema(
+        name="minute",
+        primary_key=("instrument_id", "trade_time", "period"),
+        date_field="trade_time",
+        description="Stock minute bars, native periods 1m/5m only (plan 18).",
+        display_name_zh="个股分钟行情（1m/5m）",
+        interface_group="本地数据/股票/行情数据",
+        fields=_kline_fields(),
+    ),
+    "index_daily": TableSchema(
+        name="index_daily",
+        primary_key=("instrument_id", "trade_time", "period"),
+        date_field="trade_time",
+        description="Index daily bars incl. TDX 880/881 sector/theme indices.",
+        display_name_zh="指数日线行情",
+        interface_group="本地数据/指数/行情数据",
+        fields=_kline_fields(index=True),
+    ),
+    "index_minute": TableSchema(
+        name="index_minute",
+        primary_key=("instrument_id", "trade_time", "period"),
+        date_field="trade_time",
+        description="Index minute bars, native periods 1m/5m only (plan 18).",
+        display_name_zh="指数分钟行情（1m/5m）",
+        interface_group="本地数据/指数/行情数据",
+        fields=_kline_fields(index=True),
+    ),
+    "index_catalog": TableSchema(
+        name="index_catalog",
+        primary_key=("instrument_id",),
+        date_field=None,
+        description="Index directory incl. TDX 880/881 sector/theme indices (daily PIT snapshot).",
+        display_name_zh="指数目录（含板块/题材）",
+        interface_group="本地数据/指数/基础资料",
+        fields=INDEX_CATALOG_FIELDS,
+    ),
 }
 
-TABLE_ALIASES: Dict[str, str] = {
+TABLE_ALIASES: dict[str, str] = {
     "stock_basic": "stock_basic_exchange",
     "stock-basic": "stock_basic_exchange",
     "stock-basic-exchange": "stock_basic_exchange",
@@ -361,7 +493,7 @@ def normalize_table_name(table: str) -> str:
     return TABLE_ALIASES.get(normalized, normalized)
 
 
-def list_tables(*, include_aliases: bool = False) -> Tuple[str, ...]:
+def list_tables(*, include_aliases: bool = False) -> tuple[str, ...]:
     tables = tuple(SCHEMAS)
     if include_aliases:
         return tuple(dict.fromkeys((*tables, *TABLE_ALIASES)))

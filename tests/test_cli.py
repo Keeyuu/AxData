@@ -1411,8 +1411,18 @@ def test_data_cli_lists_inspects_and_previews_local_dataset(capsys, tmp_path) ->
 
     pd.DataFrame(
         [
-            {"ts_code": "000001.SZ", "trade_date": "20240102", "close": 10.2},
-            {"ts_code": "600000.SH", "trade_date": "20240102", "close": 8.1},
+            {
+                "instrument_id": "000001.SZ",
+                "trade_time": "2024-01-02 15:00:00+08:00",
+                "period": "day",
+                "close": 10.2,
+            },
+            {
+                "instrument_id": "600000.SH",
+                "trade_time": "2024-01-02 15:00:00+08:00",
+                "period": "day",
+                "close": 8.1,
+            },
         ]
     ).to_parquet(parquet_path, engine="pyarrow", index=False)
 
@@ -1434,11 +1444,11 @@ def test_data_cli_lists_inspects_and_previews_local_dataset(capsys, tmp_path) ->
                     "output_paths": {"parquet": str(parquet_path)},
                     "quality": {
                         "quality_status": "ok",
-                        "date_field": "trade_date",
+                        "date_field": "trade_time",
                         "write_mode": "upsert_by_key",
-                        "partition_by": ["trade_date"],
+                        "partition_by": ["trade_time"],
                         "primary_key": "pass",
-                        "write_primary_key": ["ts_code", "trade_date"],
+                        "write_primary_key": ["instrument_id", "trade_time", "period"],
                         "rows_before": 1,
                         "rows_written": 2,
                         "rows_after": 2,
@@ -1448,11 +1458,11 @@ def test_data_cli_lists_inspects_and_previews_local_dataset(capsys, tmp_path) ->
             },
             quality={
                 "quality_status": "ok",
-                "date_field": "trade_date",
+                "date_field": "trade_time",
                 "write_mode": "upsert_by_key",
-                "partition_by": ["trade_date"],
+                "partition_by": ["trade_time"],
                 "primary_key": "pass",
-                "write_primary_key": ["ts_code", "trade_date"],
+                "write_primary_key": ["instrument_id", "trade_time", "period"],
                 "rows_before": 1,
                 "rows_written": 2,
                 "rows_after": 2,
@@ -1473,8 +1483,8 @@ def test_data_cli_lists_inspects_and_previews_local_dataset(capsys, tmp_path) ->
     assert main(["--data-root", str(data_root), "data", "inspect", "daily", "--json"]) == 0
     inspected = json.loads(capsys.readouterr().out)
     assert inspected["output_paths"]["parquet"] == str(parquet_path)
-    assert inspected["columns"] == ["ts_code", "trade_date", "close"]
-    assert inspected["primary_key"] == ["ts_code", "trade_date"]
+    assert inspected["columns"] == ["instrument_id", "trade_time", "period", "close"]
+    assert inspected["primary_key"] == ["instrument_id", "trade_time", "period"]
 
     assert main(["--data-root", str(data_root), "data", "inspect", "daily"]) == 0
     text = capsys.readouterr().out
@@ -1490,14 +1500,14 @@ def test_data_cli_lists_inspects_and_previews_local_dataset(capsys, tmp_path) ->
             "--symbol",
             "000001.SZ",
             "--fields",
-            "ts_code,close",
+            "instrument_id,close",
             "--limit",
             "5",
             "--json",
         ]
     ) == 0
     preview = json.loads(capsys.readouterr().out)
-    assert preview["rows"] == [{"ts_code": "000001.SZ", "close": 10.2}]
+    assert preview["rows"] == [{"instrument_id": "000001.SZ", "close": 10.2}]
 
 
 def test_query_cli_uses_axdata_data_dir_for_core_tables(capsys, monkeypatch, tmp_path) -> None:

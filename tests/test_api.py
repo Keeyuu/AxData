@@ -143,42 +143,36 @@ STOCK_BASIC_ROWS = [
 
 DAILY_ROWS = [
     {
-        "ts_code": "000001.SZ",
-        "trade_date": "20240102",
+        "instrument_id": "000001.SZ",
+        "trade_time": "20240102",
+        "period": "day",
         "open": 10.0,
         "high": 10.5,
         "low": 9.8,
         "close": 10.2,
-        "pre_close": 10.0,
-        "change": 0.2,
-        "pct_chg": 2.0,
-        "vol": 1000.0,
+        "volume": 1000.0,
         "amount": 10200.0,
     },
     {
-        "ts_code": "000001.SZ",
-        "trade_date": "20240103",
+        "instrument_id": "000001.SZ",
+        "trade_time": "20240103",
+        "period": "day",
         "open": 10.2,
         "high": 10.8,
         "low": 10.1,
         "close": 10.6,
-        "pre_close": 10.2,
-        "change": 0.4,
-        "pct_chg": 3.92,
-        "vol": 1200.0,
+        "volume": 1200.0,
         "amount": 12600.0,
     },
     {
-        "ts_code": "600000.SH",
-        "trade_date": "20240102",
+        "instrument_id": "600000.SH",
+        "trade_time": "20240102",
+        "period": "day",
         "open": 8.0,
         "high": 8.3,
         "low": 7.9,
         "close": 8.1,
-        "pre_close": 8.0,
-        "change": 0.1,
-        "pct_chg": 1.25,
-        "vol": 900.0,
+        "volume": 900.0,
         "amount": 7290.0,
     },
 ]
@@ -585,8 +579,8 @@ def test_v1_query_supports_sdk_style_params_fields_filters_dates_and_limit(tmp_p
         "/v1/query",
         json={
             "table": "daily",
-            "columns": "ts_code,trade_date,close",
-            "filters": {"ts_code": "000001.SZ", "ignored": None},
+            "columns": "instrument_id,trade_time,close",
+            "filters": {"instrument_id": "000001.SZ", "ignored": None},
             "params": {
                 "start": "2024-01-02",
                 "end": "2024-01-03",
@@ -600,7 +594,7 @@ def test_v1_query_supports_sdk_style_params_fields_filters_dates_and_limit(tmp_p
     payload = response.json()
     assert payload["meta"] == {"table": "daily", "count": 1}
     assert payload["data"] == [
-        {"ts_code": "000001.SZ", "trade_date": "20240102", "close": 10.2}
+        {"instrument_id": "000001.SZ", "trade_time": "20240102", "close": 10.2}
     ]
 
 
@@ -613,7 +607,7 @@ def test_v1_query_reads_ingested_tables_without_source_fetch(tmp_path, monkeypat
         "/v1/query",
         json={
             "table": "daily",
-            "params": {"ts_code": "000001.SZ", "start_date": "2024-01-02"},
+            "params": {"instrument_id": "000001.SZ", "start_date": "2024-01-02"},
         },
     )
 
@@ -644,11 +638,11 @@ def test_data_dataset_routes_list_inspect_and_preview(tmp_path, monkeypatch):
                     "output_paths": {"parquet": str(parquet_path)},
                     "quality": {
                         "quality_status": "ok",
-                        "date_field": "trade_date",
+                        "date_field": "trade_time",
                         "write_mode": "upsert_by_key",
-                        "partition_by": ["trade_date"],
+                        "partition_by": ["trade_time"],
                         "primary_key": "pass",
-                        "write_primary_key": ["ts_code", "trade_date"],
+                        "write_primary_key": ["instrument_id", "trade_time", "period"],
                         "rows_before": 1,
                         "rows_written": len(DAILY_ROWS),
                         "rows_after": len(DAILY_ROWS),
@@ -658,11 +652,11 @@ def test_data_dataset_routes_list_inspect_and_preview(tmp_path, monkeypatch):
             },
             quality={
                 "quality_status": "ok",
-                "date_field": "trade_date",
+                "date_field": "trade_time",
                 "write_mode": "upsert_by_key",
-                "partition_by": ["trade_date"],
+                "partition_by": ["trade_time"],
                 "primary_key": "pass",
-                "write_primary_key": ["ts_code", "trade_date"],
+                "write_primary_key": ["instrument_id", "trade_time", "period"],
                 "rows_before": 1,
                 "rows_written": len(DAILY_ROWS),
                 "rows_after": len(DAILY_ROWS),
@@ -683,7 +677,7 @@ def test_data_dataset_routes_list_inspect_and_preview(tmp_path, monkeypatch):
             "symbol": "000001.SZ",
             "start": "2024-01-03",
             "end": "2024-01-31",
-            "fields": "ts_code,trade_date,close",
+            "fields": "instrument_id,trade_time,close",
             "limit": 1000,
         },
     )
@@ -697,16 +691,20 @@ def test_data_dataset_routes_list_inspect_and_preview(tmp_path, monkeypatch):
 
     assert inspect_response.status_code == 200
     assert inspect_response.json()["data"]["output_paths"]["parquet"] == str(parquet_path)
-    assert inspect_response.json()["data"]["primary_key"] == ["ts_code", "trade_date"]
+    assert inspect_response.json()["data"]["primary_key"] == [
+        "instrument_id",
+        "trade_time",
+        "period",
+    ]
 
     assert preview_response.status_code == 200
     payload = preview_response.json()
     assert payload["meta"]["limit"] == 100
-    assert payload["meta"]["columns"] == ["ts_code", "trade_date", "close"]
+    assert payload["meta"]["columns"] == ["instrument_id", "trade_time", "close"]
     assert payload["meta"]["preview_format"] == "parquet"
     assert payload["meta"]["preview_paths"] == [str(parquet_path.resolve())]
     assert payload["data"] == [
-        {"ts_code": "000001.SZ", "trade_date": "20240103", "close": 10.6}
+        {"instrument_id": "000001.SZ", "trade_time": "20240103", "close": 10.6}
     ]
 
 
@@ -733,10 +731,10 @@ def test_data_dataset_route_deletes_local_dataset(tmp_path, monkeypatch):
                     "interface_name": "daily",
                     "row_count": len(DAILY_ROWS),
                     "output_paths": {"parquet": str(parquet_path)},
-                    "quality": {"quality_status": "ok", "date_field": "trade_date"},
+                    "quality": {"quality_status": "ok", "date_field": "trade_time"},
                 },
             },
-            quality={"quality_status": "ok", "date_field": "trade_date"},
+            quality={"quality_status": "ok", "date_field": "trade_time"},
             created_at="2026-06-29T00:00:00+00:00",
             updated_at="2026-06-29T00:01:00+00:00",
             finished_at="2026-06-29T00:01:00+00:00",
