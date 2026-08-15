@@ -1700,6 +1700,7 @@ def test_plugin_provider_override_route_resolves_conflict(monkeypatch, tmp_path)
     assert providers[TENCENT_PROVIDER_ID]["overridden_interfaces"] == []
 
 
+@pytest.mark.packaging
 def test_plugin_installed_api_lists_and_uninstalls_axdata_managed_plugin(monkeypatch, tmp_path):
     monkeypatch.setenv("AXDATA_DATA_DIR", str(tmp_path / "data"))
     axp_path = _build_tencent_axp(tmp_path)
@@ -1763,6 +1764,7 @@ def test_plugin_axp_export_api_downloads_previewable_archive(monkeypatch, tmp_pa
     assert {wheel.checksum_status for wheel in preview.wheels} == {"ok"}
 
 
+@pytest.mark.packaging
 def test_plugin_installed_api_rejects_enabled_uninstall_and_duplicate_install(monkeypatch, tmp_path):
     monkeypatch.setenv("AXDATA_DATA_DIR", str(tmp_path / "data"))
     axp_path = _build_tencent_axp(tmp_path)
@@ -1806,6 +1808,7 @@ def test_plugin_installed_api_rejects_enabled_uninstall_and_duplicate_install(mo
     assert uninstall_after_disable.status_code == 200
 
 
+@pytest.mark.packaging
 def test_plugin_axp_install_api_requires_explicit_online_dependency_opt_in(monkeypatch, tmp_path):
     monkeypatch.setenv("AXDATA_DATA_DIR", str(tmp_path / "data"))
     axp_path = _build_tencent_axp(

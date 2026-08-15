@@ -22,6 +22,7 @@ from axdata_core.axp import (
 from axdata_core.plugin_config import enable_provider, load_plugin_config, set_provider_override
 from axdata_core.provider_catalog import build_builtin_provider_registry
 
+from tests.packaging_fixtures import REGISTRY
 from tests.test_tencent_provider_package import (
     BUILTIN_TENCENT_PROVIDER_ID,
     TENCENT_INTERFACE_NAME,
@@ -42,6 +43,7 @@ def restore_sys_path() -> None:
         sys.path[:] = original
 
 
+@pytest.mark.packaging
 def test_axp_preview_reads_manifest_wheel_and_checksums(tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
 
@@ -69,6 +71,7 @@ def test_axp_preview_reads_manifest_wheel_and_checksums(tmp_path) -> None:
     assert "does not enable the Provider automatically" in " ".join(payload["warnings"])
 
 
+@pytest.mark.packaging
 def test_axp_install_defaults_disabled_and_adds_plugin_path(monkeypatch, tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -107,6 +110,7 @@ def test_axp_install_defaults_disabled_and_adds_plugin_path(monkeypatch, tmp_pat
     assert Path(installed[0].installed_path).exists()
 
 
+@pytest.mark.packaging
 def test_axp_install_can_enable_provider(monkeypatch, tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -157,6 +161,7 @@ def test_axp_export_preinstalled_provider_as_previewable_archive(tmp_path) -> No
     assert not any(name.startswith(("data/", "metadata/", "cache/", "logs/")) for name in names)
 
 
+@pytest.mark.packaging
 def test_axp_export_managed_plugin_reuses_installed_wheel(tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -185,6 +190,7 @@ def test_axp_export_managed_plugin_reuses_installed_wheel(tmp_path) -> None:
     assert preview.wheels[0].file_name.startswith("axdata_source_tencent-0.1.0-")
 
 
+@pytest.mark.packaging
 def test_axp_uninstall_removes_managed_plugin_after_disabled(monkeypatch, tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -213,6 +219,7 @@ def test_axp_uninstall_removes_managed_plugin_after_disabled(monkeypatch, tmp_pa
     assert snapshot.interfaces[TENCENT_INTERFACE_NAME].provider_id == BUILTIN_TENCENT_PROVIDER_ID
 
 
+@pytest.mark.packaging
 def test_axp_uninstall_refuses_enabled_plugin_and_clears_config_after_disable_first(monkeypatch, tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -276,6 +283,7 @@ def test_axp_uninstall_preinstalled_provider_is_logical(tmp_path) -> None:
     assert BUILTIN_TENCENT_PROVIDER_ID in config.removed_provider_ids
 
 
+@pytest.mark.packaging
 def test_axp_reinstall_requires_explicit_replace(tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path)
     data_root = tmp_path / "data"
@@ -311,6 +319,7 @@ def test_axp_reinstall_requires_explicit_replace(tmp_path) -> None:
     assert len(list_installed_axp_plugins(data_root=data_root, install_root=install_root)) == 1
 
 
+@pytest.mark.packaging
 def test_axp_install_rejects_checksum_mismatch(tmp_path) -> None:
     axp_path = _build_tencent_axp(tmp_path, checksum="0" * 64)
 
@@ -334,6 +343,7 @@ def test_axp_preview_rejects_invalid_zip(tmp_path) -> None:
         preview_axp(axp_path)
 
 
+@pytest.mark.packaging
 def test_axp_preview_and_install_reject_missing_required_dependency(tmp_path) -> None:
     axp_path = _build_tencent_axp(
         tmp_path,
@@ -364,6 +374,7 @@ def test_axp_preview_and_install_reject_missing_required_dependency(tmp_path) ->
         )
 
 
+@pytest.mark.packaging
 def test_axp_optional_missing_dependency_does_not_block_offline_install(tmp_path) -> None:
     axp_path = _build_tencent_axp(
         tmp_path,
@@ -392,6 +403,7 @@ def test_axp_optional_missing_dependency_does_not_block_offline_install(tmp_path
     assert result.preview.provider_id == TENCENT_PROVIDER_ID
 
 
+@pytest.mark.packaging
 def test_axp_installs_bundled_dependency_wheel_before_plugin(tmp_path) -> None:
     dependency_wheel = _build_dependency_wheel(tmp_path, name="axdata-demo-dep", version="1.0.0")
     axp_path = _build_tencent_axp(
@@ -426,6 +438,7 @@ def test_axp_installs_bundled_dependency_wheel_before_plugin(tmp_path) -> None:
     assert (tmp_path / "plugins" / "site-packages" / "axdata_demo_dep").exists()
 
 
+@pytest.mark.packaging
 def test_axp_dependency_detection_uses_managed_plugin_site_packages(tmp_path) -> None:
     dependency_wheel = _build_dependency_wheel(tmp_path, name="axdata-managed-dep", version="1.2.0")
     install_root = tmp_path / "plugins"
@@ -474,6 +487,7 @@ def test_axp_dependency_detection_uses_managed_plugin_site_packages(tmp_path) ->
     assert status_by_name["pip"].status == "missing"
 
 
+@pytest.mark.packaging
 def test_axp_install_allows_online_dependencies_only_when_explicit(monkeypatch, tmp_path) -> None:
     axp_path = _build_tencent_axp(
         tmp_path,
@@ -519,7 +533,7 @@ def _build_tencent_axp(
     dependencies: list[dict[str, object]] | None = None,
     extra_wheels: list[Path] | None = None,
 ) -> Path:
-    wheel_path = _build_tencent_wheel(tmp_path)
+    wheel_path = REGISTRY.get("tencent").wheel_path
     manifest_path = (
         TENCENT_PACKAGE_ROOT
         / "src"
@@ -550,28 +564,6 @@ def _build_tencent_axp(
     # Validate fixture manifest while the zip is still close to the source of truth.
     assert manifest["provider"]["provider_id"] == TENCENT_PROVIDER_ID
     return axp_path
-
-
-def _build_tencent_wheel(tmp_path: Path) -> Path:
-    wheel_dir = tmp_path / "wheelhouse"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            "--no-deps",
-            "-w",
-            str(wheel_dir),
-            str(TENCENT_PACKAGE_ROOT),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    return next(wheel_dir.glob("axdata_source_tencent-0.1.0-*.whl"))
 
 
 def _build_dependency_wheel(tmp_path: Path, *, name: str, version: str) -> Path:
@@ -605,6 +597,7 @@ include = ["{module_name}*"]
             "pip",
             "wheel",
             "--no-deps",
+            "--no-build-isolation",
             "-w",
             str(wheel_dir),
             str(package_root),

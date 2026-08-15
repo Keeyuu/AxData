@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from axdata_core.cli import main
 from axdata_core.plugin_config import disable_provider, enable_provider
 from axdata_core.plugins import ProviderManifest
@@ -257,6 +259,7 @@ def test_tencent_provider_package_manifest_matches_provider(monkeypatch, tmp_pat
     assert "axdata_source_tencent.adapter" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_tencent_provider_package_discovery_defaults_disabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tencent_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -277,6 +280,7 @@ def test_tencent_provider_package_discovery_defaults_disabled(monkeypatch, tmp_p
     assert "axdata_source_tencent.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_builtin_tencent_wins_when_external_tencent_conflicts(monkeypatch, tmp_path) -> None:
     install_root = _install_tencent_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -296,6 +300,7 @@ def test_builtin_tencent_wins_when_external_tencent_conflicts(monkeypatch, tmp_p
     assert "axdata_source_tencent.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tencent_routes_when_builtin_tencent_disabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tencent_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -346,8 +351,9 @@ def test_tencent_provider_package_pyproject_declares_entry_point() -> None:
     assert "axdata-provider.json" in pyproject["tool"]["setuptools"]["package-data"]["axdata_source_tencent"]
 
 
-def test_tencent_provider_package_builds_wheel_with_manifest_and_entry_point(tmp_path) -> None:
-    wheel_path = _build_tencent_wheel(tmp_path)
+@pytest.mark.packaging
+def test_tencent_provider_package_builds_wheel_with_manifest_and_entry_point(built_wheel) -> None:
+    wheel_path = built_wheel("tencent").wheel_path
 
     with ZipFile(wheel_path) as wheel:
         names = set(wheel.namelist())
@@ -366,11 +372,13 @@ def test_tencent_provider_package_builds_wheel_with_manifest_and_entry_point(tmp
     assert manifest.interfaces[0].name == TENCENT_INTERFACE_NAME
 
 
+@pytest.mark.packaging
 def test_tencent_provider_installed_from_wheel_is_discovered_and_can_route(
     monkeypatch,
     tmp_path,
+    built_wheel,
 ) -> None:
-    wheel_path = _build_tencent_wheel(tmp_path)
+    wheel_path = built_wheel("tencent").wheel_path
     install_root = tmp_path / "installed"
     data_root = tmp_path / "data"
 
@@ -417,30 +425,6 @@ def test_tencent_provider_installed_from_wheel_is_discovered_and_can_route(
     assert "axdata_source_tencent.provider" in sys.modules
     assert "axdata_core.adapters.tencent.provider_bridge" in sys.modules
     assert "axdata_core.adapters.tencent.request" in sys.modules
-
-
-def _build_tencent_wheel(tmp_path: Path) -> Path:
-    wheel_dir = tmp_path / "wheelhouse"
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            "--no-deps",
-            "-w",
-            str(wheel_dir),
-            str(TENCENT_PACKAGE_ROOT),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    return next(wheel_dir.glob("axdata_source_tencent-0.1.0-*.whl"))
 
 
 def _install_tencent_provider(tmp_path: Path) -> Path:

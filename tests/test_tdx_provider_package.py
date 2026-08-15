@@ -6208,6 +6208,7 @@ def test_tdx_provider_plugin_check_does_not_load_f10_runtime_specs(tmp_path) -> 
     assert "axdata_source_tdx.adapter" not in result.stdout
 
 
+@pytest.mark.packaging
 def test_tdx_provider_package_discovery_defaults_enabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6228,6 +6229,7 @@ def test_tdx_provider_package_discovery_defaults_enabled(monkeypatch, tmp_path) 
     assert "axdata_source_tdx.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tdx_request_respects_explicit_disable(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6246,6 +6248,7 @@ def test_external_tdx_request_respects_explicit_disable(monkeypatch, tmp_path) -
     assert "axdata_source_tdx.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tdx_routes_when_enabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6265,6 +6268,7 @@ def test_external_tdx_routes_when_enabled(monkeypatch, tmp_path) -> None:
     assert "axdata_source_tdx.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tdx_routes_when_builtin_tdx_disabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6311,6 +6315,7 @@ def test_external_tdx_routes_when_builtin_tdx_disabled(monkeypatch, tmp_path) ->
     assert "axdata_source_tdx.request_adapter" in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tdx_request_route_uses_provider_adapter_without_core_request(tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6369,6 +6374,7 @@ def test_external_tdx_request_route_uses_provider_adapter_without_core_request(t
     assert "core_bridge=False" in result.stdout
 
 
+@pytest.mark.packaging
 def test_external_tdx_routes_f10_when_builtin_tdx_disabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -6504,8 +6510,9 @@ def test_tdx_provider_manifest_matches_runtime_profile_and_collector_declaration
         "volume": "vol",
     }
 
-def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(tmp_path) -> None:
-    wheel_path = _build_tdx_wheel(tmp_path)
+@pytest.mark.packaging
+def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_wheel) -> None:
+    wheel_path = built_wheel("tdx").wheel_path
 
     with ZipFile(wheel_path) as wheel:
         names = set(wheel.namelist())
@@ -6683,11 +6690,13 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(tmp_pat
     assert downloaders["stock_theme_strength_rank_tdx"].resource_group == "tdx.f10"
 
 
+@pytest.mark.packaging
 def test_tdx_provider_installed_from_wheel_is_discovered_and_can_route(
     monkeypatch,
     tmp_path,
+    built_wheel,
 ) -> None:
-    wheel_path = _build_tdx_wheel(tmp_path)
+    wheel_path = built_wheel("tdx").wheel_path
     install_root = tmp_path / "installed"
     data_root = tmp_path / "data"
 
@@ -6773,30 +6782,6 @@ def test_tdx_provider_installed_from_wheel_is_discovered_and_can_route(
     ]
     expected_cache = str(_expected_default_tdx_stats_cache_root(local_app_data))
     assert cache_paths == [expected_cache, expected_cache]
-
-
-def _build_tdx_wheel(tmp_path: Path) -> Path:
-    wheel_dir = tmp_path / "wheelhouse"
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            "--no-deps",
-            "-w",
-            str(wheel_dir),
-            str(TDX_PACKAGE_ROOT),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    return next(wheel_dir.glob("axdata_source_tdx-0.1.0-*.whl"))
 
 
 def _install_tdx_provider(tmp_path: Path) -> Path:

@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from axdata_core.cli import main
 from axdata_core.plugin_config import disable_provider, enable_provider
 from axdata_core.plugins import ProviderManifest
@@ -604,6 +606,7 @@ def test_tdx_ext_provider_package_manifest_matches_provider(monkeypatch, tmp_pat
     assert "axdata_source_tdx_ext.adapter" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_tdx_ext_provider_package_discovery_defaults_enabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_ext_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -636,6 +639,7 @@ def test_tdx_ext_provider_package_discovery_defaults_enabled(monkeypatch, tmp_pa
     assert row["action_command"] is None
 
 
+@pytest.mark.packaging
 def test_external_tdx_ext_routes_when_enabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_ext_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -655,6 +659,7 @@ def test_external_tdx_ext_routes_when_enabled(monkeypatch, tmp_path) -> None:
     assert "axdata_source_tdx_ext.provider" not in sys.modules
 
 
+@pytest.mark.packaging
 def test_external_tdx_ext_routes_when_builtin_tdx_ext_disabled(monkeypatch, tmp_path) -> None:
     install_root = _install_tdx_ext_provider(tmp_path)
     data_root = tmp_path / "data"
@@ -709,8 +714,9 @@ def test_tdx_ext_provider_package_pyproject_declares_entry_point() -> None:
     )
 
 
-def test_tdx_ext_provider_package_builds_wheel_with_manifest_and_entry_point(tmp_path) -> None:
-    wheel_path = _build_tdx_ext_wheel(tmp_path)
+@pytest.mark.packaging
+def test_tdx_ext_provider_package_builds_wheel_with_manifest_and_entry_point(built_wheel) -> None:
+    wheel_path = built_wheel("tdx_ext").wheel_path
 
     with ZipFile(wheel_path) as wheel:
         names = set(wheel.namelist())
@@ -740,11 +746,13 @@ def test_tdx_ext_provider_package_builds_wheel_with_manifest_and_entry_point(tmp
     assert manifest.downloaders == ()
 
 
+@pytest.mark.packaging
 def test_tdx_ext_provider_installed_from_wheel_is_discovered_and_can_route(
     monkeypatch,
     tmp_path,
+    built_wheel,
 ) -> None:
-    wheel_path = _build_tdx_ext_wheel(tmp_path)
+    wheel_path = built_wheel("tdx_ext").wheel_path
     install_root = tmp_path / "installed"
     data_root = tmp_path / "data"
     tdx_root = _build_cache_root(tmp_path)
@@ -795,30 +803,6 @@ def test_tdx_ext_provider_installed_from_wheel_is_discovered_and_can_route(
     assert "axdata_source_tdx_ext.provider" in sys.modules
     assert "axdata_core.adapters.tdx_ext.provider_bridge" in sys.modules
     assert "axdata_core.adapters.tdx_ext.request" in sys.modules
-
-
-def _build_tdx_ext_wheel(tmp_path: Path) -> Path:
-    wheel_dir = tmp_path / "wheelhouse"
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            "--no-deps",
-            "-w",
-            str(wheel_dir),
-            str(TDX_EXT_PACKAGE_ROOT),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    return next(wheel_dir.glob("axdata_source_tdx_ext-0.1.0-*.whl"))
 
 
 def _install_tdx_ext_provider(tmp_path: Path) -> Path:

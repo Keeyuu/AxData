@@ -31,7 +31,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: 连真实 TDX 服务器的集成测试"]
+markers = [
+  "integration: 连真实 TDX 服务器的集成测试",
+  "packaging: 构建 wheel、pip 安装/卸载、临时 target/venv、安装后 entry point discovery 的打包测试",
+]
 pythonpath = [
   ".",
   "libs/axdata_core/src",

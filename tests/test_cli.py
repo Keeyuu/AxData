@@ -1558,6 +1558,7 @@ def test_plugin_enable_and_disable_update_axdata_config(capsys, tmp_path) -> Non
     assert "config" in capsys.readouterr().out
 
 
+@pytest.mark.packaging
 def test_plugin_installed_outputs_axdata_managed_plugins_json(capsys, tmp_path) -> None:
     data_root = tmp_path / "data"
     axp_path = _build_tencent_axp(tmp_path)
@@ -1579,6 +1580,7 @@ def test_plugin_installed_outputs_axdata_managed_plugins_json(capsys, tmp_path) 
     assert payload[0]["installed_path"]
 
 
+@pytest.mark.packaging
 def test_plugin_installed_discovers_axp_install_in_later_cli_process(tmp_path) -> None:
     data_root = tmp_path / "data"
     axp_path = _build_tencent_axp(tmp_path)
@@ -1636,6 +1638,7 @@ def test_plugin_installed_discovers_axp_install_in_later_cli_process(tmp_path) -
     assert payload[0]["interfaces"] == ["tencent_realtime_snapshot"]
 
 
+@pytest.mark.packaging
 def test_plugin_uninstall_removes_axdata_managed_plugin(capsys, tmp_path, monkeypatch) -> None:
     data_root = tmp_path / "data"
     axp_path = _build_tencent_axp(tmp_path)
@@ -1672,6 +1675,7 @@ def test_plugin_uninstall_rejects_environment_plugin(capsys, tmp_path, monkeypat
     assert "pip uninstall" in capsys.readouterr().err
 
 
+@pytest.mark.packaging
 def test_plugin_axp_install_requires_replace_for_existing_provider(capsys, tmp_path) -> None:
     data_root = tmp_path / "data"
     axp_path = _build_tencent_axp(tmp_path)
@@ -1704,6 +1708,7 @@ def test_plugin_axp_install_requires_replace_for_existing_provider(capsys, tmp_p
     assert payload["replaced"] is True
 
 
+@pytest.mark.packaging
 def test_plugin_axp_install_allows_online_dependencies_when_explicit(
     capsys,
     monkeypatch,
