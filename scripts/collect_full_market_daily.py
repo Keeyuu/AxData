@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -38,6 +39,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+#: data root honors AXDATA_DATA_DIR so the collection can follow a data root
+#: migrated out of the submodule working tree (plan 16 / oracle condition 3)
+DATA_ROOT = Path(os.environ.get("AXDATA_DATA_DIR") or (REPO_ROOT / "data"))
 STATE_PATH = REPO_ROOT / "logs" / "collect_full_market_state.json"
 
 
@@ -159,7 +163,7 @@ def _landed_codes(kind: str) -> set[str]:
     # base-kind mapping: "stocks_missing"/"indices_missing" must read the
     # same table as their parent kind
     table = "daily" if kind.startswith("stocks") else "index_daily"
-    table_dir = REPO_ROOT / "data" / "core" / f"table={table}" / "parquet"
+    table_dir = DATA_ROOT / "core" / f"table={table}" / "parquet"
     files = sorted(table_dir.glob("*.parquet"))
     if not files:
         return set()
@@ -294,7 +298,7 @@ def _verify() -> int:
     landed: dict[str, set[str]] = {"daily": set(), "index_daily": set()}
     for table in ("daily", "index_daily"):
         code_col, date_col = "instrument_id", "trade_time"
-        table_dir = REPO_ROOT / "data" / "core" / f"table={table}" / "parquet"
+        table_dir = DATA_ROOT / "core" / f"table={table}" / "parquet"
         files = sorted(table_dir.glob("*.parquet"))
         if not files:
             problems.append(f"{table}: no files")
