@@ -45,7 +45,6 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
-    "stock_daily_price_limit_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
     "index_kline_tdx",
@@ -2239,94 +2238,81 @@ def test_downloaders_catalog_lists_stock_suspensions_and_st_tdx():
     assert payload["data"][3]["params"][1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
     assert payload["data"][4]["downloader_type"] == "full_snapshot"
     assert payload["data"][4]["default_params"] == {"scope": "all"}
-    assert payload["data"][4]["default_connection_count"] == 8
+    assert payload["data"][4]["default_connection_count"] == 16
     assert payload["data"][4]["connection_count_editable"] is False
-    assert payload["data"][4]["max_connection_count"] == 8
+    assert payload["data"][4]["max_connection_count"] == 16
     assert payload["data"][4]["concurrency"]["mode"] == "fixed"
-    assert payload["data"][4]["concurrency"]["default_source_server_count"] == 4
+    assert payload["data"][4]["concurrency"]["default_source_server_count"] == 8
     assert payload["data"][4]["concurrency"]["default_connections_per_server"] == 2
-    assert payload["data"][4]["concurrency"]["default_max_concurrent_tasks"] == 8
-    assert payload["data"][4]["concurrency"]["default_batch_size"] == 80
-    assert payload["data"][4]["primary_key"] == ["trade_date", "instrument_id"]
-    assert len(payload["data"][4]["params"]) == 2
-    assert payload["data"][4]["params"][1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
-    assert payload["data"][5]["downloader_type"] == "full_snapshot"
-    assert payload["data"][5]["default_params"] == {"scope": "all"}
-    assert payload["data"][5]["default_connection_count"] == 16
+    assert payload["data"][4]["concurrency"]["default_max_concurrent_tasks"] == 16
+    assert payload["data"][4]["concurrency"]["default_batch_size"] == 1
+    assert payload["data"][4]["primary_key"] == ["instrument_id", "record_hex"]
+    assert [row[0] for row in payload["data"][4]["params"]] == ["scope", "code", "category"]
+    assert payload["data"][5]["interface_name"] == "stock_kline_daily_tdx"
+    assert payload["data"][5]["downloader_type"] == "history"
+    assert payload["data"][5]["default_params"] == {"code": "000001.SZ", "count": 800, "adjust": "none"}
+    assert payload["data"][5]["default_connection_count"] == 1
     assert payload["data"][5]["connection_count_editable"] is False
-    assert payload["data"][5]["max_connection_count"] == 16
-    assert payload["data"][5]["concurrency"]["mode"] == "fixed"
-    assert payload["data"][5]["concurrency"]["default_source_server_count"] == 8
-    assert payload["data"][5]["concurrency"]["default_connections_per_server"] == 2
-    assert payload["data"][5]["concurrency"]["default_max_concurrent_tasks"] == 16
-    assert payload["data"][5]["concurrency"]["default_batch_size"] == 1
-    assert payload["data"][5]["primary_key"] == ["instrument_id", "record_hex"]
-    assert [row[0] for row in payload["data"][5]["params"]] == ["scope", "code", "category"]
-    assert payload["data"][6]["interface_name"] == "stock_kline_daily_tdx"
+    assert payload["data"][5]["max_connection_count"] == 1
+    assert payload["data"][5]["primary_key"] == ["instrument_id", "trade_time", "period"]
+    assert payload["data"][5]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][5]["params"]] == ["code", "count", "adjust", "anchor_date"]
+    assert payload["data"][6]["interface_name"] == "index_kline_tdx"
     assert payload["data"][6]["downloader_type"] == "history"
-    assert payload["data"][6]["default_params"] == {"code": "000001.SZ", "count": 800, "adjust": "none"}
-    assert payload["data"][6]["default_connection_count"] == 1
-    assert payload["data"][6]["connection_count_editable"] is False
-    assert payload["data"][6]["max_connection_count"] == 1
-    assert payload["data"][6]["primary_key"] == ["instrument_id", "trade_time", "period"]
-    assert payload["data"][6]["output_layer"] == "core"
-    assert [row[0] for row in payload["data"][6]["params"]] == ["code", "count", "adjust", "anchor_date"]
-    assert payload["data"][7]["interface_name"] == "index_kline_tdx"
-    assert payload["data"][7]["downloader_type"] == "history"
-    assert payload["data"][7]["default_params"] == {
+    assert payload["data"][6]["default_params"] == {
         "code": "sh000001",
         "period": "day",
         "full_history": True,
     }
-    assert payload["data"][7]["output_layer"] == "core"
-    assert payload["data"][7]["primary_key"] == ["instrument_id", "trade_time"]
-    assert [row[0] for row in payload["data"][7]["params"]] == [
+    assert payload["data"][6]["output_layer"] == "core"
+    assert payload["data"][6]["primary_key"] == ["instrument_id", "trade_time"]
+    assert [row[0] for row in payload["data"][6]["params"]] == [
         "code",
         "period",
         "count",
         "full_history",
     ]
-    assert payload["data"][8]["interface_name"] == "index_codes_tdx"
-    assert payload["data"][8]["downloader_type"] == "full_snapshot"
-    assert payload["data"][8]["default_params"] == {"include_tdx_block_index": True}
-    assert payload["data"][8]["output_layer"] == "snapshot"
-    assert payload["data"][8]["primary_key"] == "instrument_id"
-    assert payload["data"][9]["interface_name"] == "stock_adj_factor_tdx"
-    assert payload["data"][9]["downloader_type"] == "history"
-    assert payload["data"][9]["default_params"] == {"code": "000001.SZ", "adjust": "qfq"}
-    assert payload["data"][9]["default_connection_count"] == 1
-    assert payload["data"][9]["connection_count_editable"] is False
-    assert payload["data"][9]["max_connection_count"] == 1
-    assert payload["data"][9]["primary_key"] == ["ts_code", "trade_date"]
-    assert payload["data"][9]["output_layer"] == "core"
-    assert [row[0] for row in payload["data"][9]["params"]] == ["code", "adjust", "anchor_date"]
-    assert payload["data"][10]["interface_name"] == "stock_limit_ladder_tdx"
-    assert payload["data"][10]["downloader_type"] == "full_snapshot"
-    assert payload["data"][10]["default_params"] == {
+    assert payload["data"][7]["interface_name"] == "index_codes_tdx"
+    assert payload["data"][7]["downloader_type"] == "full_snapshot"
+    assert payload["data"][7]["default_params"] == {"include_tdx_block_index": True}
+    assert payload["data"][7]["output_layer"] == "snapshot"
+    assert payload["data"][7]["primary_key"] == "instrument_id"
+    assert payload["data"][8]["interface_name"] == "stock_adj_factor_tdx"
+    assert payload["data"][8]["downloader_type"] == "history"
+    assert payload["data"][8]["default_params"] == {"code": "000001.SZ", "adjust": "qfq"}
+    assert payload["data"][8]["default_connection_count"] == 1
+    assert payload["data"][8]["connection_count_editable"] is False
+    assert payload["data"][8]["max_connection_count"] == 1
+    assert payload["data"][8]["primary_key"] == ["ts_code", "trade_date"]
+    assert payload["data"][8]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][8]["params"]] == ["code", "adjust", "anchor_date"]
+    assert payload["data"][9]["interface_name"] == "stock_limit_ladder_tdx"
+    assert payload["data"][9]["downloader_type"] == "full_snapshot"
+    assert payload["data"][9]["default_params"] == {
         "count": "all",
         "scope": "main",
         "include_touched": False,
         "topic_type": "theme",
     }
-    assert payload["data"][10]["default_connection_count"] == 1
-    assert payload["data"][10]["connection_count_editable"] is False
-    assert payload["data"][10]["max_connection_count"] == 1
-    assert payload["data"][10]["primary_key"] == ["trade_date", "ladder_level", "instrument_id"]
-    assert [row[0] for row in payload["data"][10]["params"]] == [
+    assert payload["data"][9]["default_connection_count"] == 1
+    assert payload["data"][9]["connection_count_editable"] is False
+    assert payload["data"][9]["max_connection_count"] == 1
+    assert payload["data"][9]["primary_key"] == ["trade_date", "ladder_level", "instrument_id"]
+    assert [row[0] for row in payload["data"][9]["params"]] == [
         "count",
         "scope",
         "include_touched",
         "topic_type",
     ]
-    assert payload["data"][11]["interface_name"] == "stock_theme_strength_rank_tdx"
-    assert payload["data"][11]["downloader_type"] == "full_snapshot"
-    assert payload["data"][11]["default_params"] == {
+    assert payload["data"][10]["interface_name"] == "stock_theme_strength_rank_tdx"
+    assert payload["data"][10]["downloader_type"] == "full_snapshot"
+    assert payload["data"][10]["default_params"] == {
         "count": "all",
         "scope": "main",
         "topic_type": "theme",
     }
-    assert payload["data"][11]["primary_key"] == ["trade_date", "topic_type", "topic_name"]
-    assert [row[0] for row in payload["data"][11]["params"]] == ["count", "scope", "topic_type"]
+    assert payload["data"][10]["primary_key"] == ["trade_date", "topic_type", "topic_name"]
+    assert [row[0] for row in payload["data"][10]["params"]] == ["count", "scope", "topic_type"]
     historical_list = {item["interface_name"]: item for item in payload["data"]}["stock_historical_list_exchange"]
     assert historical_list["provider_id"] == "axdata.source.exchange"
     assert historical_list["manifest_downloader_name"] == "stock_historical_list_exchange.snapshot"
@@ -2858,107 +2844,6 @@ def test_download_stock_daily_share_tdx_uses_downloader_gateway(tmp_path, monkey
             "collect_mode": "manual_fill",
             "connection_mode": "long_connection",
             "concurrency_mode": "high",
-            "connection_count": None,
-            "source_server_count": None,
-            "connections_per_server": None,
-            "max_concurrent_tasks": None,
-            "batch_size": None,
-            "request_interval_ms": None,
-            "retry_count": None,
-            "timeout_ms": None,
-        }
-    ]
-
-
-def test_download_stock_daily_price_limit_tdx_uses_downloader_gateway(tmp_path, monkeypatch):
-    monkeypatch.setenv("AXDATA_DATA_DIR", str(tmp_path / "data"))
-    calls = []
-
-    def fake_run_downloader(
-        interface_name,
-        *,
-        params=None,
-        fields=None,
-        data_root=None,
-        output_root=None,
-        output_dir=None,
-        formats=None,
-        collect_mode=None,
-        connection_mode=None,
-        concurrency_mode=None,
-        connection_count=None,
-        source_server_count=None,
-        connections_per_server=None,
-        max_concurrent_tasks=None,
-        batch_size=None,
-        request_interval_ms=None,
-        retry_count=None,
-        timeout_ms=None,
-    ):
-        calls.append(
-            {
-                "interface_name": interface_name,
-                "params": params,
-                "fields": fields,
-                "data_root": data_root,
-                "output_root": output_root,
-                "output_dir": output_dir,
-                "formats": formats,
-                "collect_mode": collect_mode,
-                "connection_mode": connection_mode,
-                "concurrency_mode": concurrency_mode,
-                "connection_count": connection_count,
-                "source_server_count": source_server_count,
-                "connections_per_server": connections_per_server,
-                "max_concurrent_tasks": max_concurrent_tasks,
-                "batch_size": batch_size,
-                "request_interval_ms": request_interval_ms,
-                "retry_count": retry_count,
-                "timeout_ms": timeout_ms,
-            }
-        )
-        return {
-            "job_id": "run_daily_price_limit_test",
-            "interface_name": interface_name,
-            "status": "success",
-            "row_count": 2,
-            "output_path": str(tmp_path / "data" / "raw" / "stock_daily_price_limit_tdx.parquet"),
-        }
-
-    import axdata_core
-
-    monkeypatch.setattr(axdata_core, "run_downloader", fake_run_downloader)
-    client = TestClient(app)
-
-    response = client.post(
-        "/v1/download/stock_daily_price_limit_tdx",
-        json={
-            "params": {"scope": "all", "trade_date": "20260617"},
-            "fields": ["trade_date", "instrument_id", "limit_up_price"],
-            "output_root": str(tmp_path / "export"),
-            "formats": ["parquet"],
-            "collect_mode": "manual_fill",
-            "connection_mode": "long_connection",
-            "concurrency_mode": "medium",
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["data"]["job_id"] == "run_daily_price_limit_test"
-    assert payload["data"]["row_count"] == 2
-    assert calls == [
-        {
-            "interface_name": "stock_daily_price_limit_tdx",
-            "params": {"scope": "all", "trade_date": "20260617"},
-            "fields": ["trade_date", "instrument_id", "limit_up_price"],
-            "data_root": tmp_path / "data",
-            "output_root": str(tmp_path / "export"),
-            "output_dir": None,
-            "formats": ["parquet"],
-            "collect_mode": "manual_fill",
-            "connection_mode": "long_connection",
-            "concurrency_mode": "medium",
             "connection_count": None,
             "source_server_count": None,
             "connections_per_server": None,

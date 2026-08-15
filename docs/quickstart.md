@@ -427,7 +427,7 @@ Web 控制台顶部的 Data Browser 页面会展示 dataset 列表、行数、�
 .\.venv\Scripts\python -m axdata_core.cli plugin collectors --json
 ```
 
-当前默认内置采集器包含 TDX 8 个独立 CollectorSpec：`tdx.stock_codes_tdx.snapshot`、`tdx.stock_suspensions_tdx.snapshot`、`tdx.stock_st_list_tdx.snapshot`、`tdx.stock_daily_share_tdx.snapshot`、`tdx.stock_daily_price_limit_tdx.snapshot`、`tdx.stock_kline_daily_tdx.snapshot`、`tdx.stock_limit_ladder_tdx.snapshot`、`tdx.stock_theme_strength_rank_tdx.snapshot`。`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 保留在接口页和兼容下载入口，但不再作为采集器展示。交易所保留为 Source Provider 接口和本地基础数据能力，不再提供默认 CollectorSpec。巨潮、腾讯、东方财富和新浪的预装接口仍可在接口页或 `axdata request` 中临时查询，但不再默认出现在 Collector 或 Downloader 目录里。TDX source Provider manifest 不再贡献 legacy CollectorSpec；它仍提供 TDX 源端接口和 `/v1/downloaders` 兼容入口。创建 Collector task 需要一个真实存在的 `collector_name`。
+当前默认内置采集器包含 TDX 7 个独立 CollectorSpec：`tdx.stock_codes_tdx.snapshot`、`tdx.stock_suspensions_tdx.snapshot`、`tdx.stock_st_list_tdx.snapshot`、`tdx.stock_daily_share_tdx.snapshot`、`tdx.stock_kline_daily_tdx.snapshot`、`tdx.stock_limit_ladder_tdx.snapshot`、`tdx.stock_theme_strength_rank_tdx.snapshot`。`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 保留在接口页和兼容下载入口，但不再作为采集器展示。`stock_daily_price_limit_tdx` 为 request-only（涨跌停价属可计算附属数据，不做采集面）。交易所保留为 Source Provider 接口和本地基础数据能力，不再提供默认 CollectorSpec。巨潮、腾讯、东方财富和新浪的预装接口仍可在接口页或 `axdata request` 中临时查询，但不再默认出现在 Collector 或 Downloader 目录里。TDX source Provider manifest 不再贡献 legacy CollectorSpec；它仍提供 TDX 源端接口和 `/v1/downloaders` 兼容入口。创建 Collector task 需要一个真实存在的 `collector_name`。
 
 本地离线测试已经覆盖 Collector Runner 的基础链路：
 

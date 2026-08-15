@@ -563,7 +563,6 @@ def test_tdx_plugin_provider_exposes_collection_profiles_in_manifest() -> None:
         "stock_suspensions_tdx",
         "stock_st_list_tdx",
         "stock_daily_share_tdx",
-        "stock_daily_price_limit_tdx",
         "stock_capital_changes_tdx",
         "stock_kline_daily_tdx",
         "stock_adj_factor_tdx",
@@ -668,7 +667,7 @@ def test_tdx_plugin_provider_projection_does_not_load_downloader_runtime() -> No
     assert scenario["exit_code"] == 0
     assert scenario["provider_id"] == TDX_PROVIDER_ID
     assert scenario["interfaces"] == 90
-    assert scenario["downloaders"] == 12
+    assert scenario["downloaders"] == 11
     assert scenario["collectors"] == 0
     assert "axdata_core.sources.tdx.catalog" not in scenario["loaded"]
     assert "axdata_core.tdx_f10_catalog" not in scenario["loaded"]

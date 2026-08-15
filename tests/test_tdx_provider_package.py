@@ -196,7 +196,7 @@ def test_tdx_provider_catalog_projection_does_not_load_downloader_runtime() -> N
     result = _core_without_site_subprocess(code)
 
     assert "interfaces=90" in result.stdout
-    assert "profiles=12" in result.stdout
+    assert "profiles=11" in result.stdout
     assert "collectors=0" in result.stdout
     assert "axdata_core.sources.tdx.catalog" not in result.stdout
     assert "axdata_core.tdx_f10_catalog" not in result.stdout
@@ -6139,7 +6139,7 @@ def test_tdx_provider_package_manifest_matches_provider(monkeypatch, tmp_path, c
         )
         == 0
     )
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in capsys.readouterr().out
+    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=11 collectors=0" in capsys.readouterr().out
     assert "axdata_source_tdx.provider" in sys.modules
     assert "axdata_source_tdx.adapter" not in sys.modules
 
@@ -6690,7 +6690,6 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_w
         "stock_suspensions_tdx",
         "stock_st_list_tdx",
         "stock_daily_share_tdx",
-        "stock_daily_price_limit_tdx",
         "stock_capital_changes_tdx",
         "stock_kline_daily_tdx",
         "stock_adj_factor_tdx",
@@ -6706,7 +6705,6 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_w
     assert downloaders["stock_suspensions_tdx"].default_options["source_server_count"] == 4
     assert downloaders["stock_suspensions_tdx"].default_options["batch_size"] == 80
     assert downloaders["stock_daily_share_tdx"].default_limits["max_connections_total"] == 8
-    assert downloaders["stock_daily_price_limit_tdx"].default_options["max_concurrent_tasks"] == 8
     assert downloaders["stock_capital_changes_tdx"].default_limits["max_connections_total"] == 16
     assert downloaders["stock_kline_daily_tdx"].default_options["params"] == {
         "code": "000001.SZ",

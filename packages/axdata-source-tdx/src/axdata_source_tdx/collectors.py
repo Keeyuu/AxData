@@ -13,7 +13,6 @@ TDX_COLLECTOR_INTERFACES: tuple[str, ...] = (
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
-    "stock_daily_price_limit_tdx",
     "stock_kline_daily_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
@@ -28,7 +27,6 @@ TDX_BASE_COLLECTOR_INTERFACES: tuple[str, ...] = (
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
-    "stock_daily_price_limit_tdx",
 )
 
 TDX_LEGACY_COLLECTOR_INTERFACES: tuple[str, ...] = ()
@@ -41,7 +39,6 @@ _TDX_DATASET_IDS: dict[str, str] = {
     "stock_suspensions_tdx": "tdx.stock_suspensions",
     "stock_st_list_tdx": "tdx.stock_st_list",
     "stock_daily_share_tdx": "tdx.stock_daily_share",
-    "stock_daily_price_limit_tdx": "tdx.stock_daily_price_limit",
     "stock_kline_daily_tdx": "tdx.stock_daily",
     "stock_limit_ladder_tdx": "tdx.stock_limit_ladder",
     "stock_theme_strength_rank_tdx": "tdx.stock_theme_strength_rank",
@@ -54,7 +51,6 @@ _TDX_CATEGORIES: dict[str, str] = {
     "stock_suspensions_tdx": "stock_status",
     "stock_st_list_tdx": "stock_status",
     "stock_daily_share_tdx": "share_capital",
-    "stock_daily_price_limit_tdx": "price_limit",
     "stock_kline_daily_tdx": "daily",
     "stock_limit_ladder_tdx": "shortline",
     "stock_theme_strength_rank_tdx": "theme_strength",
@@ -67,7 +63,6 @@ _TDX_DESCRIPTIONS: dict[str, str] = {
     "stock_suspensions_tdx": "独立通达信采集器：采集最新停牌股票列表并写入本地快照。",
     "stock_st_list_tdx": "独立通达信采集器：采集最新 ST / *ST 股票列表并写入本地快照。",
     "stock_daily_share_tdx": "独立通达信采集器：采集每日股本盘前快照并写入本地数据层。",
-    "stock_daily_price_limit_tdx": "独立通达信采集器：采集最新涨跌停价格快照并写入本地数据层。",
     "stock_kline_daily_tdx": "独立通达信采集器：采集显式代码列表的日 K 线小样本并写入本地数据层；生产级全市场 raw/staging -> core 转换仍需后续任务补齐。",
     "stock_limit_ladder_tdx": "独立通达信采集器：采集当前连板天梯快照并写入本地数据层。",
     "stock_theme_strength_rank_tdx": "独立通达信采集器：采集当前题材强度排行快照并写入本地数据层。",
@@ -80,7 +75,6 @@ _TDX_EXECUTION_OPTIONS: dict[str, dict[str, Any]] = {
     "stock_suspensions_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_st_list_tdx": {"source_server_count": 1, "connections_per_server": 3},
     "stock_daily_share_tdx": {"source_server_count": 4, "connections_per_server": 2},
-    "stock_daily_price_limit_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_kline_daily_tdx": {"source_server_count": 1, "connections_per_server": 1},
     "stock_limit_ladder_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_theme_strength_rank_tdx": {"source_server_count": 4, "connections_per_server": 2},

@@ -5273,8 +5273,8 @@
       "asset_class": "stock",
       "request_mode": "source_request",
       "collection": {
-        "supported": true,
-        "default_profile": "stock_daily_price_limit_tdx.snapshot"
+        "supported": false,
+        "default_profile": null
       },
       "parameters": [
         {
@@ -23169,94 +23169,6 @@
           "total_share",
           "float_share",
           "free_float_share_z"
-        ],
-        "field_mappings": {}
-      }
-    },
-    {
-      "name": "stock_daily_price_limit_tdx.snapshot",
-      "interface_name": "stock_daily_price_limit_tdx",
-      "display_name_zh": "涨跌停价格",
-      "resource_group": "tdx.quote",
-      "mode": "snapshot",
-      "default_options": {
-        "params": {
-          "scope": "all"
-        },
-        "fields": [
-          "trade_date",
-          "instrument_id",
-          "symbol",
-          "tdx_code",
-          "exchange",
-          "name",
-          "name_flag",
-          "pre_close_trade_date",
-          "pre_close",
-          "pre_close_source",
-          "limit_up_price",
-          "limit_down_price",
-          "limit_ratio_pct",
-          "limit_rule",
-          "limit_status"
-        ],
-        "formats": [
-          "parquet"
-        ],
-        "connection_mode": "long_connection",
-        "source_server_count": 4,
-        "connections_per_server": 2,
-        "max_concurrent_tasks": 8,
-        "batch_size": 80,
-        "request_interval_ms": 0,
-        "retry_count": 0,
-        "timeout_ms": 30000
-      },
-      "default_limits": {
-        "max_active_jobs": 1,
-        "max_connections_total": 8,
-        "request_interval_ms": 0,
-        "max_retries": 0
-      },
-      "output": {
-        "default_dir_name": "stock_daily_price_limit_tdx",
-        "file_name_template": "{interface_name}_{data_date}_{run_time}",
-        "supported_formats": [
-          "parquet",
-          "csv",
-          "jsonl"
-        ],
-        "output_layer": "snapshot",
-        "primary_key": [
-          "trade_date",
-          "instrument_id"
-        ],
-        "required_columns": [
-          "trade_date",
-          "instrument_id"
-        ],
-        "expected_columns": [
-          "trade_date",
-          "instrument_id",
-          "symbol",
-          "tdx_code",
-          "exchange",
-          "name",
-          "name_flag",
-          "pre_close_trade_date",
-          "pre_close",
-          "pre_close_source",
-          "limit_up_price",
-          "limit_down_price",
-          "limit_ratio_pct",
-          "limit_rule",
-          "limit_status"
-        ],
-        "date_field": "trade_date",
-        "numeric_positive_columns": [
-          "pre_close",
-          "limit_up_price",
-          "limit_down_price"
         ],
         "field_mappings": {}
       }

@@ -18,7 +18,6 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
-    "stock_daily_price_limit_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
     "index_kline_tdx",
@@ -832,47 +831,6 @@ def test_stock_daily_share_downloader_profile_is_registered():
     assert profile.params[1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
 
 
-def test_stock_daily_price_limit_downloader_profile_is_registered():
-    profile = get_downloader_profile("stock_daily_price_limit_tdx")
-
-    assert profile.display_name == "涨跌停价格"
-    assert profile.downloader_type == "full_snapshot"
-    assert profile.default_params == {"scope": "all"}
-    assert profile.default_fields == [
-        "trade_date",
-        "instrument_id",
-        "symbol",
-        "tdx_code",
-        "exchange",
-        "name",
-        "name_flag",
-        "pre_close_trade_date",
-        "pre_close",
-        "pre_close_source",
-        "limit_up_price",
-        "limit_down_price",
-        "limit_ratio_pct",
-        "limit_rule",
-        "limit_status",
-    ]
-    assert profile.primary_key == ("trade_date", "instrument_id")
-    assert profile.supported_formats == ["parquet", "csv", "jsonl"]
-    assert profile.default_connection_mode == "long_connection"
-    assert profile.default_connection_count == 8
-    assert profile.connection_count_editable is False
-    assert profile.max_connection_count == 8
-    assert profile.concurrency.mode == "fixed"
-    assert profile.concurrency.default_source_server_count == 4
-    assert profile.concurrency.default_connections_per_server == 2
-    assert profile.concurrency.default_max_concurrent_tasks == 8
-    assert profile.concurrency.default_batch_size == 80
-    assert profile.concurrency.batch_size_editable is False
-    assert profile.params is not None
-    assert len(profile.params) == 2
-    assert profile.params[0][0] == "scope"
-    assert profile.params[1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
-
-
 def test_stock_capital_changes_downloader_profile_is_registered():
     profile = get_downloader_profile("stock_capital_changes_tdx")
 
@@ -1087,7 +1045,7 @@ def test_stock_theme_strength_rank_downloader_profile_is_registered():
 
 
 def test_build_request_plan_filters_downloader_params_and_records_concurrency():
-    profile = get_downloader_profile("stock_daily_price_limit_tdx")
+    profile = get_downloader_profile("stock_daily_share_tdx")
     concurrency = downloaders_module._normalize_concurrency(profile)
 
     plan = downloaders_module.build_request_plan(
@@ -1097,7 +1055,7 @@ def test_build_request_plan_filters_downloader_params_and_records_concurrency():
         concurrency=concurrency,
     )
 
-    assert plan.interface_name == "stock_daily_price_limit_tdx"
+    assert plan.interface_name == "stock_daily_share_tdx"
     assert plan.params == {"scope": "all", "code": "000001.SZ"}
     assert plan.fields == profile.default_fields
     assert plan.options["concurrency"] == concurrency.to_dict()
@@ -2067,7 +2025,7 @@ def test_tdx_downloader_interface_sets_prefers_provider_package_when_available()
     assert "stock_limit_ladder_tdx" in result.stdout
     assert "stock_theme_strength_rank_tdx" in result.stdout
     assert "f10_prefill=stock_limit_ladder_tdx,stock_theme_strength_rank_tdx" in result.stdout
-    assert "runtime=stock_daily_price_limit_tdx,stock_daily_share_tdx" in result.stdout
+    assert "runtime=stock_daily_share_tdx" in result.stdout
     assert "tdx_downloader=False" in result.stdout
     assert "tdx_request=False" in result.stdout
 
@@ -2416,93 +2374,6 @@ def test_stock_daily_share_downloader_delegates_full_scope_to_interface_and_writ
     assert [call["interface_name"] for call in calls] == ["stock_daily_share_tdx"]
     assert result["source_meta"]["tdx_code_expansion_source"] == "stock_codes_tdx"
     assert result["source_meta"]["tdx_finance_batch_size"] == 80
-
-
-def test_stock_daily_price_limit_downloader_delegates_full_scope_to_interface_and_writes_snapshot(
-    tmp_path, monkeypatch
-):
-    fake_adapter = object()
-    calls = []
-
-    def fake_request_interface(interface_name, *, params, fields, persist, adapter=None, options=None, data_root=None):
-        calls.append(
-            {
-                "interface_name": interface_name,
-                "params": dict(params),
-                "fields": list(fields) if fields is not None else None,
-                "persist": persist,
-                "adapter": adapter,
-            }
-        )
-        assert adapter is fake_adapter
-        assert persist is False
-        if interface_name == "stock_daily_price_limit_tdx":
-            assert params["scope"] == "all"
-            assert "trade_date" not in params
-            assert "code" not in params
-            assert fields == get_downloader_profile("stock_daily_price_limit_tdx").default_fields
-            return SourceRequestResult(
-                records=[
-                    {
-                        "trade_date": "20260617",
-                        "instrument_id": "000001.SZ",
-                        "symbol": "000001",
-                        "tdx_code": "sz000001",
-                        "exchange": "SZSE",
-                        "name": "平安银行",
-                        "name_flag": None,
-                        "pre_close_trade_date": "20260616",
-                        "pre_close": 10.94,
-                        "pre_close_source": "tdx_realtime_snapshot",
-                        "limit_up_price": 12.03,
-                        "limit_down_price": 9.85,
-                        "limit_ratio_pct": 10.0,
-                        "limit_rule": "main_10pct",
-                        "limit_status": "normal",
-                    }
-                ],
-                meta={
-                    "source": "tdx",
-                    "snapshot_date": "20260617",
-                    "tdx_code_expansion_source": "stock_codes_tdx",
-                    "tdx_requested_code_count": 1,
-                    "tdx_price_limit_mode": "latest_snapshot",
-                    "tdx_quote_batch_count": 1,
-                },
-            )
-        raise AssertionError(interface_name)
-
-    monkeypatch.setattr(downloaders_module, "request_interface", fake_request_interface)
-
-    result = downloaders_module.run_downloader(
-        "stock_daily_price_limit_tdx",
-        params={"scope": "all", "trade_date": "20260617"},
-        output_root=tmp_path / "data",
-        formats=["parquet"],
-        adapter=fake_adapter,
-    )
-
-    assert result["status"] == "success"
-    assert result["row_count"] == 1
-    assert result["snapshot_date"] == "20260617"
-    assert result["snapshot_date_source"] == "snapshot_date"
-    assert result["file_stem"] == "stock_daily_price_limit_tdx_20260617"
-    assert result["output_path"].startswith(
-        str(
-            tmp_path
-            / "data"
-            / "通达信"
-            / "股票数据"
-            / "基础数据"
-            / "stock_daily_price_limit_tdx"
-            / "parquet"
-        )
-    )
-    assert result["output_path"].endswith("stock_daily_price_limit_tdx_20260617.parquet")
-    assert result["quality"]["primary_key"] == "pass"
-    assert result["params"] == {"scope": "all"}
-    assert [call["interface_name"] for call in calls] == ["stock_daily_price_limit_tdx"]
-    assert result["source_meta"]["tdx_code_expansion_source"] == "stock_codes_tdx"
 
 
 def test_stock_capital_changes_downloader_delegates_full_scope_to_interface_and_writes_snapshot(

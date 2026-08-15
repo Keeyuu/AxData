@@ -24,6 +24,5 @@ DOWNLOADER_F10_TOPIC_PREFILL_INTERFACES = frozenset(
 DOWNLOADER_RUNTIME_SOURCE_SERVER_MAX_INTERFACES = frozenset(
     {
         "stock_daily_share_tdx",
-        "stock_daily_price_limit_tdx",
     }
 )
