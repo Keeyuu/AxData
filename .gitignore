@@ -23,6 +23,7 @@ data/staging/**
 data/core/**
 data/factor/**
 data/snapshot/**
+data/snapshots/**
 data/cache/**
 data/tmp_*/**
 data/通达信/**

@@ -117,6 +117,19 @@ def _run_batch(
         # each attempt is a fresh process -> fresh TDX host selection; some
         # public hosts carry no BSE/BJ quotes and return 0 rows, so an empty
         # write is treated as a failure and retried on other hosts.
+        if _attempt > 0 and _batch_already_landed(kind, codes):
+            # a previous attempt wrote the batch but we failed to parse its
+            # output (or were killed before saving state): re-running would
+            # write a second overlapping file, so accept it as landed.
+            result = {
+                "batch": batch_id,
+                "codes": len(codes),
+                "rows": "already-landed",
+                "ok": True,
+                "seconds": round(time.time() - t0, 1),
+                "stderr_tail": "",
+            }
+            break
         proc = subprocess.run(argv, cwd=str(REPO_ROOT), capture_output=True, text=True)
         rows = None
         if proc.returncode == 0:
@@ -143,13 +156,21 @@ def _run_batch(
 def _landed_codes(kind: str) -> set[str]:
     import pandas as pd
 
-    table = "daily" if kind == "stocks" else "index_daily"
+    # base-kind mapping: "stocks_missing"/"indices_missing" must read the
+    # same table as their parent kind
+    table = "daily" if kind.startswith("stocks") else "index_daily"
     table_dir = REPO_ROOT / "data" / "core" / f"table={table}" / "parquet"
     files = sorted(table_dir.glob("*.parquet"))
     if not files:
         return set()
     frames = [pd.read_parquet(f, columns=["tdx_code"]) for f in files]
     return set(pd.concat(frames, ignore_index=True)["tdx_code"].unique())
+
+
+def _batch_already_landed(kind: str, codes: list[str]) -> bool:
+    # batch writes are atomic single files over disjoint code sets, so any
+    # landed code implies the whole batch landed
+    return bool(_landed_codes(kind).intersection(codes))
 
 
 def _missing_rounds(kind: str, rounds: int) -> int:
@@ -207,7 +228,15 @@ def _collect(
 
     state = _load_state()
     done = set(state.get(kind, []))
-    pending = [(i, chunk) for i, chunk in enumerate(batches) if batch_key(chunk) not in done]
+    landed = _landed_codes(kind)
+    # reconcile against landed data first: a batch whose codes are already on
+    # disk is complete even if the state file missed it (killed between the
+    # write and the state save, or a batch-size change)
+    pending = [
+        (i, chunk)
+        for i, chunk in enumerate(batches)
+        if batch_key(chunk) not in done and not landed.intersection(chunk)
+    ]
     if not pending:
         print("nothing to do (all batches complete)")
         return 0
@@ -262,14 +291,15 @@ def _verify() -> int:
     import pandas as pd
 
     problems: list[str] = []
-    for table, code_col, date_col in (("daily", "instrument_id", "trade_time"),
-                                      ("index_daily", "instrument_id", "trade_time")):
+    landed: dict[str, set[str]] = {"daily": set(), "index_daily": set()}
+    for table in ("daily", "index_daily"):
+        code_col, date_col = "instrument_id", "trade_time"
         table_dir = REPO_ROOT / "data" / "core" / f"table={table}" / "parquet"
         files = sorted(table_dir.glob("*.parquet"))
         if not files:
             problems.append(f"{table}: no files")
             continue
-        frames = (pd.read_parquet(f, columns=[code_col, date_col]) for f in files)
+        frames = (pd.read_parquet(f, columns=[code_col, date_col, "tdx_code"]) for f in files)
         df = pd.concat(list(frames), ignore_index=True)
         dup = df.duplicated(subset=[code_col, date_col]).sum()
         per = df.groupby(code_col)[date_col].agg(["count", "min", "max"])
@@ -277,16 +307,19 @@ def _verify() -> int:
               f"date={df[date_col].min()}..{df[date_col].max()} dup_pk={dup}")
         if dup:
             problems.append(f"{table}: {dup} duplicate PK rows across files")
-        if table == "daily":
-            frames = [pd.read_parquet(f, columns=["tdx_code"]) for f in files]
-            have = set(pd.concat(frames, ignore_index=True)["tdx_code"].unique())
-    stocks = _stock_codes()
-    missing = [c for c in stocks if c not in have]
-    print(f"coverage: stocks {len(have)}/{len(stocks)} missing={len(missing)}")
-    if missing[:5]:
-        print(f"  first missing: {missing[:5]}")
-    if missing:
-        problems.append(f"stocks missing {len(missing)} codes")
+        landed[table] = set(df["tdx_code"].unique())
+    for kind, expected_fn, table in (
+        ("stocks", _stock_codes, "daily"),
+        ("indices", _index_codes, "index_daily"),
+    ):
+        expected = expected_fn()
+        missing = [c for c in expected if c not in landed[table]]
+        print(f"coverage: {kind} {len(expected) - len(missing)}/{len(expected)} "
+              f"missing={len(missing)}")
+        if missing[:10]:
+            print(f"  first missing: {missing[:10]}")
+        if missing:
+            problems.append(f"{kind} missing {len(missing)} codes")
     for p in problems:
         print(f"PROBLEM: {p}", file=sys.stderr)
     return 1 if problems else 0
