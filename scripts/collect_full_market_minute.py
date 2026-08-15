@@ -408,8 +408,23 @@ def _verify() -> int:
             )
         kind = "stocks" if table == "minute" else "indices"
         expected = _expected_universe(kind, problems)
+        # ④b prerequisite: load the matching daily table's trade dates once per
+        # table (minute -> daily, index_minute -> index_daily) for the subset check
+        daily_table = "daily" if table == "minute" else "index_daily"
+        daily_dir = DATA_ROOT / "core" / f"table={daily_table}" / "parquet"
+        if list(daily_dir.glob("*.parquet")):
+            daily_dates = {
+                d
+                for (d,) in con.execute(
+                    "SELECT DISTINCT CAST(trade_time AS DATE) FROM read_parquet(?)",
+                    [str(daily_dir / "*.parquet")],
+                ).fetchall()
+            }
+        else:
+            daily_dates = None
+            problems.append(f"{table}: {daily_table} table empty, cannot check date subset")
         for period in PERIODS:
-            _verify_period(con, table, kind, period, glob, expected, problems)
+            _verify_period(con, table, kind, period, glob, expected, problems, daily_dates)
     for p in problems:
         print(f"PROBLEM: {p}", file=sys.stderr)
     return 1 if problems else 0
@@ -438,6 +453,7 @@ def _verify_period(
     glob: str,
     expected: set[str],
     problems: list[str],
+    daily_dates: set | None = None,
 ) -> None:
     # ① coverage: missing = expected - landed - known zero-quote exemptions
     landed = _landed_codes(table, period)
@@ -474,6 +490,23 @@ def _verify_period(
         print(f"  overflow: {row}")
     if overflow:
         problems.append(f"{table} {period}: {len(overflow)} code-day rows over bar cap")
+
+    # ④b date subset: every minute trade date must exist in the matching daily
+    # table (plan 18 §4.4); None = daily table unavailable, already flagged
+    if daily_dates is not None:
+        daily_name = "daily" if table == "minute" else "index_daily"
+        minute_dates = {
+            d
+            for (d,) in con.execute(
+                "SELECT DISTINCT CAST(trade_time AS DATE) FROM read_parquet(?) WHERE period = ?",
+                [glob, period],
+            ).fetchall()
+        }
+        extra = sorted(minute_dates - daily_dates)
+        print(f"dates-subset {table} {period}: {len(extra)} dates not in {daily_name}")
+        if extra:
+            print(f"  first extra: {extra[:10]}")
+            problems.append(f"{table} {period}: {len(extra)} trade dates absent from {daily_name}")
 
     # ⑤ scale sanity: row-count report (informational, not a hard fail)
     total, codes, first, last = con.execute(

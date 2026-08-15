@@ -179,6 +179,41 @@ def test_verify_period_passes_on_clean_fixture(monkeypatch, tmp_path) -> None:
     assert problems == []
 
 
+def test_verify_period_passes_when_minute_dates_subset_of_daily(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(minute, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(minute, "DEPTH_MIN_TRADING_DAYS", {"1m": 2, "5m": 2})
+    dates = ["2026-07-01", "2026-07-02", "2026-07-03"]
+    _write_minute_file(
+        tmp_path, "minute", "batch_1.parquet", _bars("000001.SZ", "sz000001", "1m", dates, 240)
+    )
+
+    con = duckdb.connect()
+    glob = str(tmp_path / "core" / "table=minute" / "parquet" / "*.parquet")
+    daily_dates = {pd.Timestamp(d).date() for d in dates}
+    problems: list[str] = []
+    minute._verify_period(con, "minute", "stocks", "1m", glob, {"sz000001"}, problems, daily_dates)
+
+    assert problems == []
+
+
+def test_verify_period_flags_minute_dates_not_in_daily(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(minute, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(minute, "DEPTH_MIN_TRADING_DAYS", {"1m": 2, "5m": 2})
+    dates = ["2026-07-01", "2026-07-02", "2026-07-03"]
+    _write_minute_file(
+        tmp_path, "minute", "batch_1.parquet", _bars("000001.SZ", "sz000001", "1m", dates, 240)
+    )
+
+    con = duckdb.connect()
+    glob = str(tmp_path / "core" / "table=minute" / "parquet" / "*.parquet")
+    # daily table only knows two of the three minute trade dates
+    daily_dates = {pd.Timestamp("2026-07-01").date(), pd.Timestamp("2026-07-02").date()}
+    problems: list[str] = []
+    minute._verify_period(con, "minute", "stocks", "1m", glob, {"sz000001"}, problems, daily_dates)
+
+    assert problems == ["minute 1m: 1 trade dates absent from daily"]
+
+
 # ------------------------------------------------- 5m -> 15m synthesis rule
 
 
