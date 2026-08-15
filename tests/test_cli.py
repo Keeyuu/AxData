@@ -1358,11 +1358,8 @@ def test_collector_task_run_json_subprocess_outputs_ascii_safe_guidance(tmp_path
         ]
     )
 
-    create = subprocess.run(
+    create_exit = main(
         [
-            sys.executable,
-            "-m",
-            "axdata_core.cli",
             "--data-root",
             str(data_root),
             "collector",
@@ -1373,13 +1370,9 @@ def test_collector_task_run_json_subprocess_outputs_ascii_safe_guidance(tmp_path
             "kline_disabled_ascii_safe",
             "--disabled",
             "--json",
-        ],
-        cwd=REPO_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        ]
     )
-    assert create.returncode == 0, create.stderr.decode("utf-8", errors="replace")
+    assert create_exit == 0
 
     result = subprocess.run(
         [
@@ -1589,25 +1582,19 @@ def test_plugin_installed_discovers_axp_install_in_later_cli_process(tmp_path) -
         "PYTHONPATH": f"{REPO_ROOT};{REPO_ROOT / 'libs' / 'axdata_core'};{REPO_ROOT / 'packages' / 'axdata-sdk'}",
     }
 
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "axdata_core.cli",
-            "--data-root",
-            str(data_root),
-            "plugin",
-            "axp-install",
-            str(axp_path),
-            "--no-pth",
-            "--json",
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+    assert (
+        main(
+            [
+                "--data-root",
+                str(data_root),
+                "plugin",
+                "axp-install",
+                str(axp_path),
+                "--no-pth",
+                "--json",
+            ]
+        )
+        == 0
     )
     result = subprocess.run(
         [

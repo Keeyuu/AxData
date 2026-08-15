@@ -29,6 +29,7 @@ from tests.test_tdx_source_request_adapter import (
     _minimal_stat_line,
     _stats_zip_bytes,
 )
+from tests.import_scenario_runner import run_import_family
 from tests.tdx_plugin_helpers import (
     TDX_BASE_COLLECTOR_DATASET_IDS,
     TDX_COLLECTOR_PLUGIN_ID,
@@ -5612,175 +5613,160 @@ def test_core_source_adapter_factory_map_is_lightweight() -> None:
     assert "source_request=False" in result.stdout
 
 
-@pytest.mark.parametrize(
-    "module_name",
-    [
-        "axdata_core.adapters.tdx.adjustment_fetch",
-        "axdata_core.adapters.tdx.auction_fetch",
-        "axdata_core.adapters.tdx.code_fetch",
-        "axdata_core.adapters.tdx.execution_utils",
-        "axdata_core.adapters.tdx.finance_fetch",
-        "axdata_core.adapters.tdx.f10_executor",
-        "axdata_core.adapters.tdx.intraday_fetch",
-        "axdata_core.adapters.tdx.kline_helpers",
-        "axdata_core.adapters.tdx.limit_ladder_fetch",
-        "axdata_core.adapters.tdx.price_limit_fetch",
-        "axdata_core.adapters.tdx.quote_fetch",
-        "axdata_core.adapters.tdx.rank_fetch",
-        "axdata_core.adapters.tdx.series_history",
-        "axdata_core.adapters.tdx.status_fetch",
-    ],
-)
+_FETCH_HELPER_MODULES = [
+    "axdata_core.adapters.tdx.adjustment_fetch",
+    "axdata_core.adapters.tdx.auction_fetch",
+    "axdata_core.adapters.tdx.code_fetch",
+    "axdata_core.adapters.tdx.execution_utils",
+    "axdata_core.adapters.tdx.finance_fetch",
+    "axdata_core.adapters.tdx.f10_executor",
+    "axdata_core.adapters.tdx.intraday_fetch",
+    "axdata_core.adapters.tdx.kline_helpers",
+    "axdata_core.adapters.tdx.limit_ladder_fetch",
+    "axdata_core.adapters.tdx.price_limit_fetch",
+    "axdata_core.adapters.tdx.quote_fetch",
+    "axdata_core.adapters.tdx.rank_fetch",
+    "axdata_core.adapters.tdx.series_history",
+    "axdata_core.adapters.tdx.status_fetch",
+]
+_FETCH_HELPER_TRACKED = [
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+    "axdata_core.adapters.tdx.f10_request",
+    "axdata_core.adapters.tdx.tqlex",
+    "axdata_core.tdx_f10_specs",
+    "axdata_core.source_request",
+    "axdata_core.adapters.tdx.stats_resource",
+    "axdata_core.adapters.tdx.stats_cache",
+    "axdata_core.adapters.tdx.stats_models",
+    "axdata_core.adapters.tdx.finance_maps",
+]
+
+_FETCH_FAMILY_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _fetch_family_results() -> dict[str, dict[str, object]]:
+    global _FETCH_FAMILY_RESULTS
+    if _FETCH_FAMILY_RESULTS is None:
+        _FETCH_FAMILY_RESULTS = run_import_family(
+            _FETCH_HELPER_MODULES,
+            _FETCH_HELPER_TRACKED,
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _FETCH_FAMILY_RESULTS
+
+
+@pytest.mark.parametrize("module_name", _FETCH_HELPER_MODULES)
 def test_tdx_fetch_helper_imports_are_lightweight(module_name: str) -> None:
-    code = (
-        "import importlib\n"
-        "import sys\n"
-        f"module_name = {module_name!r}\n"
-        "importlib.import_module(module_name)\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.f10_request',\n"
-        "    'axdata_core.adapters.tdx.tqlex',\n"
-        "    'axdata_core.tdx_f10_specs',\n"
-        "    'axdata_core.source_request',\n"
-        "    'axdata_core.adapters.tdx.stats_resource',\n"
-        "    'axdata_core.adapters.tdx.stats_cache',\n"
-        "    'axdata_core.adapters.tdx.stats_models',\n"
-        "    'axdata_core.adapters.tdx.finance_maps',\n"
-        "]\n"
-        "print('module=' + str(module_name in sys.modules))\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "module=True" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _fetch_family_results()[module_name]
+    assert scenario["exit_code"] == 0
+    assert scenario["module_loaded"] is True
+    assert scenario["loaded"] == []
 
 
-@pytest.mark.parametrize(
-    "module_name",
-    [
-        "axdata_core.adapters.tdx.adjustment",
-        "axdata_core.adapters.tdx.derived_rows",
-        "axdata_core.adapters.tdx.downloader_interface_sets",
-        "axdata_core.adapters.tdx.downloader_profiles",
-        "axdata_core.adapters.tdx.finance_maps",
-        "axdata_core.adapters.tdx.interface_sets",
-        "axdata_core.adapters.tdx.limit_ladder_topics",
-        "axdata_core.adapters.tdx.price_limit_calendar",
-        "axdata_core.adapters.tdx.price_limit_history",
-        "axdata_core.adapters.tdx.request_limits",
-        "axdata_core.adapters.tdx.request_params",
-        "axdata_core.adapters.tdx.request_compat",
-        "axdata_core.adapters.tdx.request_adapter_runtime",
-        "axdata_core.adapters.tdx.request_host_config",
-        "axdata_core.adapters.tdx.request_methods",
-        "axdata_core.adapters.tdx.request_seams",
-        "axdata_core.adapters.tdx.wire_requests",
-    ],
-)
+_RULE_HELPER_MODULES = [
+    "axdata_core.adapters.tdx.adjustment",
+    "axdata_core.adapters.tdx.derived_rows",
+    "axdata_core.adapters.tdx.downloader_interface_sets",
+    "axdata_core.adapters.tdx.downloader_profiles",
+    "axdata_core.adapters.tdx.finance_maps",
+    "axdata_core.adapters.tdx.interface_sets",
+    "axdata_core.adapters.tdx.limit_ladder_topics",
+    "axdata_core.adapters.tdx.price_limit_calendar",
+    "axdata_core.adapters.tdx.price_limit_history",
+    "axdata_core.adapters.tdx.request_limits",
+    "axdata_core.adapters.tdx.request_params",
+    "axdata_core.adapters.tdx.request_compat",
+    "axdata_core.adapters.tdx.request_adapter_runtime",
+    "axdata_core.adapters.tdx.request_host_config",
+    "axdata_core.adapters.tdx.request_methods",
+    "axdata_core.adapters.tdx.request_seams",
+    "axdata_core.adapters.tdx.wire_requests",
+]
+_RULE_HELPER_TRACKED = [
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+    "axdata_core.adapters.tdx.f10_request",
+    "axdata_core.adapters.tdx.tqlex",
+    "axdata_core.tdx_f10_specs",
+    "axdata_core.source_request",
+]
+
+_RULE_FAMILY_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _rule_family_results() -> dict[str, dict[str, object]]:
+    global _RULE_FAMILY_RESULTS
+    if _RULE_FAMILY_RESULTS is None:
+        _RULE_FAMILY_RESULTS = run_import_family(
+            _RULE_HELPER_MODULES,
+            _RULE_HELPER_TRACKED,
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _RULE_FAMILY_RESULTS
+
+
+@pytest.mark.parametrize("module_name", _RULE_HELPER_MODULES)
 def test_tdx_rule_helper_imports_are_lightweight(module_name: str) -> None:
-    code = (
-        "import importlib\n"
-        "import sys\n"
-        f"module_name = {module_name!r}\n"
-        "importlib.import_module(module_name)\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.f10_request',\n"
-        "    'axdata_core.adapters.tdx.tqlex',\n"
-        "    'axdata_core.tdx_f10_specs',\n"
-        "    'axdata_core.source_request',\n"
-        "]\n"
-        "print('module=' + str(module_name in sys.modules))\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "module=True" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _rule_family_results()[module_name]
+    assert scenario["exit_code"] == 0
+    assert scenario["module_loaded"] is True
+    assert scenario["loaded"] == []
 
 
-@pytest.mark.parametrize(
-    "module_name",
-    [
-        "axdata_core.adapters.tdx.client_factory",
-        "axdata_core.adapters.tdx.codes",
-        "axdata_core.adapters.tdx.f10_normalize",
-        "axdata_core.adapters.tdx.f10_postprocess",
-        "axdata_core.adapters.tdx.f10_render",
-        "axdata_core.adapters.tdx.finance_normalize",
-        "axdata_core.adapters.tdx.host_config",
-        "axdata_core.adapters.tdx.normalize_utils",
-        "axdata_core.adapters.tdx.options",
-        "axdata_core.adapters.tdx.price_limits",
-        "axdata_core.adapters.tdx.quote_identity",
-        "axdata_core.adapters.tdx.rank_params",
-        "axdata_core.adapters.tdx.request_filters",
-        "axdata_core.adapters.tdx.security_codes",
-        "axdata_core.adapters.tdx.snapshot_normalize",
-        "axdata_core.adapters.tdx.time_series_normalize",
-    ],
-)
+_NORMALIZATION_HELPER_MODULES = [
+    "axdata_core.adapters.tdx.client_factory",
+    "axdata_core.adapters.tdx.codes",
+    "axdata_core.adapters.tdx.f10_normalize",
+    "axdata_core.adapters.tdx.f10_postprocess",
+    "axdata_core.adapters.tdx.f10_render",
+    "axdata_core.adapters.tdx.finance_normalize",
+    "axdata_core.adapters.tdx.host_config",
+    "axdata_core.adapters.tdx.normalize_utils",
+    "axdata_core.adapters.tdx.options",
+    "axdata_core.adapters.tdx.price_limits",
+    "axdata_core.adapters.tdx.quote_identity",
+    "axdata_core.adapters.tdx.rank_params",
+    "axdata_core.adapters.tdx.request_filters",
+    "axdata_core.adapters.tdx.security_codes",
+    "axdata_core.adapters.tdx.snapshot_normalize",
+    "axdata_core.adapters.tdx.time_series_normalize",
+]
+_NORMALIZATION_HELPER_TRACKED = [
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+    "axdata_core.adapters.tdx.f10_request",
+    "axdata_core.adapters.tdx.tqlex",
+    "axdata_core.tdx_f10_specs",
+    "axdata_core.source_request",
+    "axdata_core.tdx_server_config",
+    "axdata_core._tdx_wire.hosts",
+    "axdata_core.adapters.tdx.finance_maps",
+]
+
+_NORMALIZATION_FAMILY_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _normalization_family_results() -> dict[str, dict[str, object]]:
+    global _NORMALIZATION_FAMILY_RESULTS
+    if _NORMALIZATION_FAMILY_RESULTS is None:
+        _NORMALIZATION_FAMILY_RESULTS = run_import_family(
+            _NORMALIZATION_HELPER_MODULES,
+            _NORMALIZATION_HELPER_TRACKED,
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _NORMALIZATION_FAMILY_RESULTS
+
+
+@pytest.mark.parametrize("module_name", _NORMALIZATION_HELPER_MODULES)
 def test_tdx_normalization_helper_imports_are_lightweight(module_name: str) -> None:
-    code = (
-        "import importlib\n"
-        "import sys\n"
-        f"module_name = {module_name!r}\n"
-        "importlib.import_module(module_name)\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.f10_request',\n"
-        "    'axdata_core.adapters.tdx.tqlex',\n"
-        "    'axdata_core.tdx_f10_specs',\n"
-        "    'axdata_core.source_request',\n"
-        "    'axdata_core.tdx_server_config',\n"
-        "    'axdata_core._tdx_wire.hosts',\n"
-        "    'axdata_core.adapters.tdx.finance_maps',\n"
-        "]\n"
-        "print('module=' + str(module_name in sys.modules))\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "module=True" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _normalization_family_results()[module_name]
+    assert scenario["exit_code"] == 0
+    assert scenario["module_loaded"] is True
+    assert scenario["loaded"] == []
 
 
 def test_tdx_provider_adapter_import_is_lightweight() -> None:

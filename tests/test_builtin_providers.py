@@ -23,6 +23,7 @@ from axdata_core.source_errors import SourceAdapterError, SourceAdapterNotFound,
 from axdata_core.source_execution_options import execution_options_for_source
 from axdata_core.sources import list_request_interface_names, list_request_interfaces
 
+from tests.import_scenario_runner import run_import_family, run_scenario_batch
 from tests.test_external_sources import CninfoOpener, TencentOpener
 from tests.tdx_plugin_helpers import (
     TDX_EXT_PROVIDER_ID,
@@ -60,6 +61,10 @@ BUILTIN_GENERIC_PROVIDER_COUNTS = {
 }
 
 
+def _core_pythonpath() -> str:
+    return str(REPO_ROOT / "libs" / "axdata_core")
+
+
 def _core_without_site_subprocess(code: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-S", "-c", code],
@@ -73,6 +78,387 @@ def _core_without_site_subprocess(code: str) -> subprocess.CompletedProcess[str]
         stderr=subprocess.PIPE,
         text=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# TS-050 保守配对：同 clean state 的 subprocess 测试族合进一次进程，
+# 每个 scenario 先查 forbidden 是否已加载（防顺序污染）再执行动作，
+# 结果按 scenario 累积为 JSON，父测试逐 scenario 断言。
+# ---------------------------------------------------------------------------
+
+_TRACKED_REQUIRES_PLUGIN = [
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+    "axdata_core.adapters.tdx.provider_bridge",
+    "axdata_core.adapters.tdx_ext.request",
+    "axdata_core.adapters.tdx_ext.client",
+    "axdata_core.adapters.tdx_ext.pool",
+    "axdata_core.adapters.tdx_ext.provider_bridge",
+]
+
+
+def _unavailable_result_tail(tracked: list[str]) -> str:
+    """shared"unavailable/message + tracked"记录段，用于 SourceUnavailableError 场景。"""
+
+    return (
+        "loaded = [name for name in tracked if name in sys.modules]\n"
+        "results[scenario_name] = {\n"
+        "    'unavailable': unavailable,\n"
+        "    'message': message,\n"
+        "    'pre_loaded': pre_loaded,\n"
+        "    'loaded': loaded,\n"
+        "    'forbidden_missing': [name for name in tracked if name not in loaded],\n"
+        "    'exit_code': exit_code,\n"
+        "}\n"
+    )
+
+
+def _registry_adapter_requires_plugin_code(provider_id: str, interface_name: str, options: dict) -> str:
+    """模拟 1744/1793：plugin disabled 环境下 registry_adapter_for_interface 必须报不可用。"""
+
+    return (
+        "import os, sys, tempfile\n"
+        "from pathlib import Path\n"
+        "tmp = Path(tempfile.mkdtemp(prefix='axdata_requires_plugin_'))\n"
+        "os.environ['AXDATA_DATA_DIR'] = str(tmp / 'data')\n"
+        "os.environ['AXDATA_PLUGIN_CONFIG_PATH'] = str(tmp / 'metadata' / 'plugins.json')\n"
+        "os.environ['AXDATA_PLUGIN_INSTALL_ROOT'] = str(tmp / 'plugins')\n"
+        "from axdata_core.plugin_config import disable_provider\n"
+        f"disable_provider({provider_id!r}, path=os.environ['AXDATA_PLUGIN_CONFIG_PATH'])\n"
+        f"tracked = {_TRACKED_REQUIRES_PLUGIN!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    from axdata_core.source_errors import SourceUnavailableError\n"
+        "    from axdata_core.source_request import registry_adapter_for_interface\n"
+        "    try:\n"
+        f"        registry_adapter_for_interface({interface_name!r}, options={options!r})\n"
+        "        unavailable = False\n"
+        "        message = ''\n"
+        "    except SourceUnavailableError as exc:\n"
+        "        unavailable = True\n"
+        "        message = str(exc)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    unavailable = None\n"
+        "    message = None\n"
+        + _unavailable_result_tail(_TRACKED_REQUIRES_PLUGIN)
+    )
+
+
+_REGISTRY_ADAPTER_REQUIRES_PLUGIN_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _registry_adapter_requires_plugin_results() -> dict[str, dict[str, object]]:
+    global _REGISTRY_ADAPTER_REQUIRES_PLUGIN_RESULTS
+    if _REGISTRY_ADAPTER_REQUIRES_PLUGIN_RESULTS is None:
+        _REGISTRY_ADAPTER_REQUIRES_PLUGIN_RESULTS = run_scenario_batch(
+            [
+                (
+                    "registry_adapter_for_tdx_requires_plugin",
+                    _registry_adapter_requires_plugin_code(
+                        TDX_PROVIDER_ID, "stock_codes_tdx", {"source_server_count": 1}
+                    ),
+                ),
+                (
+                    "registry_adapter_for_tdx_ext_requires_plugin",
+                    _registry_adapter_requires_plugin_code(
+                        TDX_EXT_PROVIDER_ID, "futures_contracts_tdx", {"server_cache_root": "cache"}
+                    ),
+                ),
+            ],
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _REGISTRY_ADAPTER_REQUIRES_PLUGIN_RESULTS
+
+
+_TRACKED_UNKNOWN_TDX_SUFFIX = [
+    "axdata_core.adapters.tdx.provider_bridge",
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx_ext.provider_bridge",
+    "axdata_core.adapters.tdx_ext.request",
+    "axdata_core._tdx_wire.client",
+]
+
+
+def _request_interface_unknown_suffix_code(interface_name: str) -> str:
+    """2311：request_interface 对未知 tdx 后缀接口直接报不可用，不加载 tdx 运行时。"""
+
+    return (
+        "import sys\n"
+        "from axdata_core.source_errors import SourceUnavailableError\n"
+        "from axdata_core.source_request import request_interface\n"
+        f"tracked = {_TRACKED_UNKNOWN_TDX_SUFFIX!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    try:\n"
+        f"        request_interface({interface_name!r})\n"
+        "        unavailable = False\n"
+        "        message = ''\n"
+        "    except SourceUnavailableError as exc:\n"
+        "        unavailable = True\n"
+        "        message = str(exc)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    unavailable = None\n"
+        "    message = None\n"
+        + _unavailable_result_tail(_TRACKED_UNKNOWN_TDX_SUFFIX)
+    )
+
+
+def _registry_adapter_unknown_suffix_code(interface_name: str) -> str:
+    """2272：registry 无该接口且 build_builtin_provider_registry 被替换时同样报不可用。"""
+
+    return (
+        "import sys\n"
+        "from axdata_core.source_errors import SourceUnavailableError\n"
+        "import axdata_core.provider_catalog as provider_catalog\n"
+        "import axdata_core.source_request as source_request\n"
+        "class FakeSnapshot:\n"
+        "    providers = {}\n"
+        "class FakeRegistry:\n"
+        "    def get_interface(self, interface_name):\n"
+        "        raise KeyError(interface_name)\n"
+        "    def snapshot(self):\n"
+        "        return FakeSnapshot()\n"
+        "provider_catalog.build_builtin_provider_registry = lambda **_: FakeRegistry()\n"
+        f"tracked = {_TRACKED_UNKNOWN_TDX_SUFFIX!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    try:\n"
+        f"        source_request.registry_adapter_for_interface({interface_name!r})\n"
+        "        unavailable = False\n"
+        "        message = ''\n"
+        "    except SourceUnavailableError as exc:\n"
+        "        unavailable = True\n"
+        "        message = str(exc)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    unavailable = None\n"
+        "    message = None\n"
+        + _unavailable_result_tail(_TRACKED_UNKNOWN_TDX_SUFFIX)
+    )
+
+
+_UNKNOWN_TDX_SUFFIX_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _unknown_tdx_suffix_results() -> dict[str, dict[str, object]]:
+    global _UNKNOWN_TDX_SUFFIX_RESULTS
+    if _UNKNOWN_TDX_SUFFIX_RESULTS is None:
+        # 先执行无 monkeypatch 的 request_interface 场景，避免 build_builtin_provider_registry
+        # 替换残留影响后续场景（先查后导）。
+        _UNKNOWN_TDX_SUFFIX_RESULTS = run_scenario_batch(
+            [
+                (
+                    "request_interface_unknown_tdx_suffix_does_not_load_tdx_runtime",
+                    _request_interface_unknown_suffix_code("community_shadow_tdx"),
+                ),
+                (
+                    "unregistered_tdx_suffix_does_not_load_tdx_runtime",
+                    _registry_adapter_unknown_suffix_code("community_shadow_tdx"),
+                ),
+            ],
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _UNKNOWN_TDX_SUFFIX_RESULTS
+
+
+_TDX_EXT_SINGLE_SOURCE_TRACKED = [
+    "axdata_core.sources.tdx.catalog",
+    "axdata_core.tdx_f10_catalog",
+    "axdata_core.tdx_f10_specs",
+    "axdata_core.downloaders",
+    "axdata_core.downloader_registry",
+    "axdata_core.source_request",
+    "axdata_core.adapters.tdx_ext.request",
+    "axdata_core.adapters.tdx_ext.client",
+    "axdata_core.adapters.tdx_ext.pool",
+]
+
+_TDX_PROJECTION_TRACKED = [
+    "axdata_core.sources.tdx.catalog",
+    "axdata_core.tdx_f10_catalog",
+    "axdata_core.tdx_f10_specs",
+    "axdata_core.downloaders",
+    "axdata_core.downloader_registry",
+    "axdata_core.source_request",
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+]
+
+
+def _tdx_plugin_projection_code() -> str:
+    """269+311：tdx_ext/tdx 插件 provider 的 import 均不加载对方运行时与 downloader runtime。"""
+
+    return (
+        "import sys\n"
+        "from axdata_source_tdx_ext.provider import provider\n"
+        "interfaces = provider.interfaces()\n"
+        "downloaders = provider.downloader_profiles()\n"
+        f"tracked = {_TDX_EXT_SINGLE_SOURCE_TRACKED!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    provider_id = provider.provider_id\n"
+        "    interface_count = len(interfaces)\n"
+        "    downloader_count = len(downloaders)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    provider_id = None\n"
+        "    interface_count = None\n"
+        "    downloader_count = None\n"
+        "loaded = [name for name in tracked if name in sys.modules]\n"
+        "results['tdx_ext_plugin_provider_is_single_source_lightweight'] = {\n"
+        "    'provider_id': provider_id,\n"
+        "    'interfaces': interface_count,\n"
+        "    'downloaders': downloader_count,\n"
+        "    'pre_loaded': pre_loaded,\n"
+        "    'loaded': loaded,\n"
+        "    'forbidden_missing': [name for name in tracked if name not in loaded],\n"
+        "    'exit_code': exit_code,\n"
+        "}\n"
+        "from axdata_source_tdx.provider import provider\n"
+        "interfaces = provider.interfaces()\n"
+        "downloaders = provider.downloader_profiles()\n"
+        "collectors = provider.collectors()\n"
+        f"tracked = {_TDX_PROJECTION_TRACKED!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    provider_id = provider.provider_id\n"
+        "    interface_count = len(interfaces)\n"
+        "    downloader_count = len(downloaders)\n"
+        "    collector_count = len(collectors)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    provider_id = None\n"
+        "    interface_count = None\n"
+        "    downloader_count = None\n"
+        "    collector_count = None\n"
+        "loaded = [name for name in tracked if name in sys.modules]\n"
+        "results['tdx_plugin_provider_projection_does_not_load_downloader_runtime'] = {\n"
+        "    'provider_id': provider_id,\n"
+        "    'interfaces': interface_count,\n"
+        "    'downloaders': downloader_count,\n"
+        "    'collectors': collector_count,\n"
+        "    'pre_loaded': pre_loaded,\n"
+        "    'loaded': loaded,\n"
+        "    'forbidden_missing': [name for name in tracked if name not in loaded],\n"
+        "    'exit_code': exit_code,\n"
+        "}\n"
+    )
+
+
+_TDX_PLUGIN_PROJECTION_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _tdx_plugin_projection_results() -> dict[str, dict[str, object]]:
+    global _TDX_PLUGIN_PROJECTION_RESULTS
+    if _TDX_PLUGIN_PROJECTION_RESULTS is None:
+        _TDX_PLUGIN_PROJECTION_RESULTS = run_scenario_batch(
+            [
+                (
+                    "tdx_plugin_projection_pair",
+                    _tdx_plugin_projection_code(),
+                ),
+            ],
+            pythonpath=TDX_PLUGIN_PYTHONPATH,
+            cwd=REPO_ROOT,
+        )
+    return _TDX_PLUGIN_PROJECTION_RESULTS
+
+
+_ADAPTER_FACTORY_UNKNOWN_TRACKED = [
+    "axdata_core.adapters.tdx.provider_bridge",
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx_ext.provider_bridge",
+    "axdata_core.adapters.tdx_ext.request",
+    "axdata_core.adapters.exchange.provider_bridge",
+    "axdata_core.adapters.tencent.provider_bridge",
+]
+
+_BUILTIN_TDX_PROVIDER_LOOKUP_TRACKED = [
+    "axdata_core.adapters.tdx.request",
+    "axdata_core.adapters.tdx.downloader",
+    "axdata_core.adapters.tdx.provider_bridge",
+    "axdata_core.adapters.tdx_ext.request",
+    "axdata_core.adapters.tdx_ext.client",
+    "axdata_core.adapters.tdx_ext.pool",
+    "axdata_core.adapters.tdx_ext.provider_bridge",
+]
+
+
+def _adapter_factory_and_builtin_lookup_code() -> str:
+    """1658+1698：未知 source 与缺插件 provider 查询都不加载 source adapter 运行时。"""
+
+    return (
+        "import sys\n"
+        "from axdata_core.source_adapter_factory import adapter_for_source_code\n"
+        f"tracked = {_ADAPTER_FACTORY_UNKNOWN_TRACKED!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    try:\n"
+        "        adapter_for_source_code('unknown_tdx')\n"
+        "        error = ''\n"
+        "    except KeyError as exc:\n"
+        "        error = str(exc)\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    error = None\n"
+        "loaded = [name for name in tracked if name in sys.modules]\n"
+        "results['source_adapter_factory_unknown_source_does_not_load_source_adapters'] = {\n"
+        "    'error': error,\n"
+        "    'pre_loaded': pre_loaded,\n"
+        "    'loaded': loaded,\n"
+        "    'forbidden_missing': [name for name in tracked if name not in loaded],\n"
+        "    'exit_code': exit_code,\n"
+        "}\n"
+        "from axdata_core.builtin_providers import get_builtin_provider\n"
+        f"tracked = {_BUILTIN_TDX_PROVIDER_LOOKUP_TRACKED!r}\n"
+        "pre_loaded = [name for name in tracked if name in sys.modules]\n"
+        "try:\n"
+        "    missing = {}\n"
+        "    for source_code in ('tdx', 'tdx_ext'):\n"
+        "        try:\n"
+        "            get_builtin_provider(source_code)\n"
+        "            missing[source_code] = False\n"
+        "        except KeyError:\n"
+        "            missing[source_code] = True\n"
+        "    exit_code = 0\n"
+        "except BaseException:\n"
+        "    exit_code = 1\n"
+        "    missing = None\n"
+        "loaded = [name for name in tracked if name in sys.modules]\n"
+        "results['builtin_tdx_provider_lookup_requires_plugin'] = {\n"
+        "    'missing': missing,\n"
+        "    'pre_loaded': pre_loaded,\n"
+        "    'loaded': loaded,\n"
+        "    'forbidden_missing': [name for name in tracked if name not in loaded],\n"
+        "    'exit_code': exit_code,\n"
+        "}\n"
+    )
+
+
+_ADAPTER_FACTORY_AND_BUILTIN_LOOKUP_RESULTS: dict[str, dict[str, object]] | None = None
+
+
+def _adapter_factory_and_builtin_lookup_results() -> dict[str, dict[str, object]]:
+    global _ADAPTER_FACTORY_AND_BUILTIN_LOOKUP_RESULTS
+    if _ADAPTER_FACTORY_AND_BUILTIN_LOOKUP_RESULTS is None:
+        _ADAPTER_FACTORY_AND_BUILTIN_LOOKUP_RESULTS = run_scenario_batch(
+            [
+                ("adapter_factory_and_builtin_lookup_pair", _adapter_factory_and_builtin_lookup_code()),
+            ],
+            pythonpath=_core_pythonpath(),
+            cwd=REPO_ROOT,
+        )
+    return _ADAPTER_FACTORY_AND_BUILTIN_LOOKUP_RESULTS
 
 
 def test_source_request_gateway_import_is_lightweight() -> None:
@@ -107,6 +493,24 @@ def test_source_request_gateway_import_is_lightweight() -> None:
     )
 
     assert "loaded=\n" in result.stdout
+
+
+def test_import_scenario_detector_reports_deliberate_forbidden_import() -> None:
+    """TS-050 canary：检测机制必须把故意导入的 forbidden module 报为 loaded。
+
+    若未来的合并脚本失效（loaded 检查、JSON 解析或 scenario 分发被破坏），
+    此测试必须失败，防止收敛后的 import canary 变成空转。
+    """
+
+    scenario = run_import_family(
+        ["axdata_core.source_request"],
+        ["axdata_core.source_request"],
+        pythonpath=_core_pythonpath(),
+        cwd=REPO_ROOT,
+    )["axdata_core.source_request"]
+    assert scenario["module_loaded"] is True
+    assert scenario["loaded"] == ["axdata_core.source_request"]
+    assert scenario["forbidden_missing"] == []
 
 
 def test_builtin_providers_cover_current_source_catalog() -> None:
@@ -245,94 +649,29 @@ def test_builtin_generic_providers_expose_downloader_and_collector_specs() -> No
 
 
 def test_tdx_ext_plugin_provider_is_single_source_lightweight() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_source_tdx_ext.provider import provider\n"
-        "interfaces = provider.interfaces()\n"
-        "downloaders = provider.downloader_profiles()\n"
-        "print('provider_id=' + provider.provider_id)\n"
-        "print('interfaces=' + str(len(interfaces)))\n"
-        "print('downloaders=' + str(len(downloaders)))\n"
-        "tracked = [\n"
-        "    'axdata_core.sources.tdx.catalog',\n"
-        "    'axdata_core.tdx_f10_catalog',\n"
-        "    'axdata_core.tdx_f10_specs',\n"
-        "    'axdata_core.downloaders',\n"
-        "    'axdata_core.downloader_registry',\n"
-        "    'axdata_core.source_request',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core.adapters.tdx_ext.client',\n"
-        "    'axdata_core.adapters.tdx_ext.pool',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": TDX_PLUGIN_PYTHONPATH,
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert f"provider_id={TDX_EXT_PROVIDER_ID}" in result.stdout
-    assert "interfaces=31" in result.stdout
-    assert "downloaders=0" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _tdx_plugin_projection_results()["tdx_ext_plugin_provider_is_single_source_lightweight"]
+    assert scenario["exit_code"] == 0
+    assert scenario["provider_id"] == TDX_EXT_PROVIDER_ID
+    assert scenario["interfaces"] == 31
+    assert scenario["downloaders"] == 0
+    assert scenario["loaded"] == []
 
 
 def test_tdx_plugin_provider_projection_does_not_load_downloader_runtime() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_source_tdx.provider import provider\n"
-        "interfaces = provider.interfaces()\n"
-        "downloaders = provider.downloader_profiles()\n"
-        "collectors = provider.collectors()\n"
-        "print('provider_id=' + provider.provider_id)\n"
-        "print('interfaces=' + str(len(interfaces)))\n"
-        "print('downloaders=' + str(len(downloaders)))\n"
-        "print('collectors=' + str(len(collectors)))\n"
-        "tracked = [\n"
-        "    'axdata_core.sources.tdx.catalog',\n"
-        "    'axdata_core.tdx_f10_catalog',\n"
-        "    'axdata_core.tdx_f10_specs',\n"
-        "    'axdata_core.downloaders',\n"
-        "    'axdata_core.downloader_registry',\n"
-        "    'axdata_core.source_request',\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": TDX_PLUGIN_PYTHONPATH,
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert f"provider_id={TDX_PROVIDER_ID}" in result.stdout
-    assert "interfaces=90" in result.stdout
-    assert "downloaders=10" in result.stdout
-    assert "collectors=0" in result.stdout
-    assert "axdata_core.sources.tdx.catalog" not in result.stdout
-    assert "axdata_core.tdx_f10_catalog" not in result.stdout
-    assert "axdata_core.tdx_f10_specs" not in result.stdout
-    assert "axdata_core.downloaders" not in result.stdout
-    assert "axdata_core.downloader_registry" not in result.stdout
-    assert "axdata_core.source_request" not in result.stdout
-    assert "axdata_core.adapters.tdx.request" not in result.stdout
-    assert "axdata_core.adapters.tdx.downloader" not in result.stdout
+    scenario = _tdx_plugin_projection_results()["tdx_plugin_provider_projection_does_not_load_downloader_runtime"]
+    assert scenario["exit_code"] == 0
+    assert scenario["provider_id"] == TDX_PROVIDER_ID
+    assert scenario["interfaces"] == 90
+    assert scenario["downloaders"] == 10
+    assert scenario["collectors"] == 0
+    assert "axdata_core.sources.tdx.catalog" not in scenario["loaded"]
+    assert "axdata_core.tdx_f10_catalog" not in scenario["loaded"]
+    assert "axdata_core.tdx_f10_specs" not in scenario["loaded"]
+    assert "axdata_core.downloaders" not in scenario["loaded"]
+    assert "axdata_core.downloader_registry" not in scenario["loaded"]
+    assert "axdata_core.source_request" not in scenario["loaded"]
+    assert "axdata_core.adapters.tdx.request" not in scenario["loaded"]
+    assert "axdata_core.adapters.tdx.downloader" not in scenario["loaded"]
 
 
 def test_builtin_provider_works_with_registry_as_official_enabled() -> None:
@@ -1638,177 +1977,36 @@ def test_builtin_http_source_adapter_registries_do_not_load_runtime_modules() ->
 
 
 def test_source_adapter_factory_unknown_source_does_not_load_source_adapters() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_core.source_adapter_factory import adapter_for_source_code\n"
-        "try:\n"
-        "    adapter_for_source_code('unknown_tdx')\n"
-        "except KeyError as exc:\n"
-        "    print('error=' + str(exc))\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core.adapters.exchange.provider_bridge',\n"
-        "    'axdata_core.adapters.tencent.provider_bridge',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "No legacy source adapter is registered for source 'unknown_tdx'." in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _adapter_factory_and_builtin_lookup_results()[
+        "source_adapter_factory_unknown_source_does_not_load_source_adapters"
+    ]
+    assert scenario["exit_code"] == 0
+    assert "No legacy source adapter is registered for source 'unknown_tdx'." in scenario["error"]
+    assert scenario["loaded"] == []
 
 
 def test_builtin_tdx_provider_lookup_requires_plugin() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_core.builtin_providers import get_builtin_provider\n"
-        "for source_code in ('tdx', 'tdx_ext'):\n"
-        "    try:\n"
-        "        get_builtin_provider(source_code)\n"
-        "    except KeyError as exc:\n"
-        "        print(source_code + '_missing=True')\n"
-        "        print(source_code + '_error=' + str(exc))\n"
-        "    else:\n"
-        "        print(source_code + '_missing=False')\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core.adapters.tdx_ext.client',\n"
-        "    'axdata_core.adapters.tdx_ext.pool',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "tdx_missing=True" in result.stdout
-    assert "tdx_ext_missing=True" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _adapter_factory_and_builtin_lookup_results()["builtin_tdx_provider_lookup_requires_plugin"]
+    assert scenario["exit_code"] == 0
+    assert scenario["missing"]["tdx"] is True
+    assert scenario["missing"]["tdx_ext"] is True
+    assert scenario["loaded"] == []
 
 
 def test_registry_adapter_for_tdx_requires_plugin(tmp_path) -> None:
-    from axdata_core.plugin_config import disable_provider
-
-    plugin_config_path = tmp_path / "metadata" / "plugins.json"
-    disable_provider(TDX_PROVIDER_ID, path=plugin_config_path)
-
-    code = (
-        "import sys\n"
-        "from axdata_core.source_errors import SourceUnavailableError\n"
-        "from axdata_core.source_request import registry_adapter_for_interface\n"
-        "try:\n"
-        "    registry_adapter_for_interface('stock_codes_tdx', options={'source_server_count': 1})\n"
-        "except SourceUnavailableError as exc:\n"
-        "    print('unavailable=True')\n"
-        "    print('message=' + str(exc))\n"
-        "else:\n"
-        "    print('unavailable=False')\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core.adapters.tdx_ext.client',\n"
-        "    'axdata_core.adapters.tdx_ext.pool',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-            "AXDATA_DATA_DIR": str(tmp_path / "data"),
-            "AXDATA_PLUGIN_CONFIG_PATH": str(plugin_config_path),
-            "AXDATA_PLUGIN_INSTALL_ROOT": str(tmp_path / "plugins"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "unavailable=True" in result.stdout
-    assert f"message={TDX_PLUGIN_REQUIRED_MESSAGE}" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _registry_adapter_requires_plugin_results()["registry_adapter_for_tdx_requires_plugin"]
+    assert scenario["exit_code"] == 0
+    assert scenario["unavailable"] is True
+    assert scenario["message"] == TDX_PLUGIN_REQUIRED_MESSAGE
+    assert scenario["loaded"] == []
 
 
 def test_registry_adapter_for_tdx_ext_requires_plugin(tmp_path) -> None:
-    from axdata_core.plugin_config import disable_provider
-
-    plugin_config_path = tmp_path / "metadata" / "plugins.json"
-    disable_provider(TDX_EXT_PROVIDER_ID, path=plugin_config_path)
-
-    code = (
-        "import sys\n"
-        "from axdata_core.source_errors import SourceUnavailableError\n"
-        "from axdata_core.source_request import registry_adapter_for_interface\n"
-        "try:\n"
-        "    registry_adapter_for_interface('futures_contracts_tdx', options={'server_cache_root': 'cache'})\n"
-        "except SourceUnavailableError as exc:\n"
-        "    print('unavailable=True')\n"
-        "    print('message=' + str(exc))\n"
-        "else:\n"
-        "    print('unavailable=False')\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx.downloader',\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core.adapters.tdx_ext.client',\n"
-        "    'axdata_core.adapters.tdx_ext.pool',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-            "AXDATA_DATA_DIR": str(tmp_path / "data"),
-            "AXDATA_PLUGIN_CONFIG_PATH": str(plugin_config_path),
-            "AXDATA_PLUGIN_INSTALL_ROOT": str(tmp_path / "plugins"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "unavailable=True" in result.stdout
-    assert f"message={TDX_PLUGIN_REQUIRED_MESSAGE}" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _registry_adapter_requires_plugin_results()["registry_adapter_for_tdx_ext_requires_plugin"]
+    assert scenario["exit_code"] == 0
+    assert scenario["unavailable"] is True
+    assert scenario["message"] == TDX_PLUGIN_REQUIRED_MESSAGE
+    assert scenario["loaded"] == []
 
 
 def test_tdx_plugin_provider_bridge_import_does_not_load_request_module() -> None:
@@ -2240,90 +2438,19 @@ def test_unregistered_tdx_suffix_no_longer_routes_to_tdx_adapter(monkeypatch) ->
 
 
 def test_unregistered_tdx_suffix_does_not_load_tdx_runtime() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_core.source_errors import SourceUnavailableError\n"
-        "import axdata_core.provider_catalog as provider_catalog\n"
-        "import axdata_core.source_request as source_request\n"
-        "class FakeSnapshot:\n"
-        "    providers = {}\n"
-        "class FakeRegistry:\n"
-        "    def get_interface(self, interface_name):\n"
-        "        raise KeyError(interface_name)\n"
-        "    def snapshot(self):\n"
-        "        return FakeSnapshot()\n"
-        "provider_catalog.build_builtin_provider_registry = lambda **_: FakeRegistry()\n"
-        "try:\n"
-        "    source_request.registry_adapter_for_interface('community_shadow_tdx')\n"
-        "except SourceUnavailableError as exc:\n"
-        "    print('unavailable=True')\n"
-        "    print('message=' + str(exc))\n"
-        "else:\n"
-        "    print('unavailable=False')\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core._tdx_wire.client',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "unavailable=True" in result.stdout
-    assert f"message={TDX_PLUGIN_REQUIRED_MESSAGE}" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _unknown_tdx_suffix_results()["unregistered_tdx_suffix_does_not_load_tdx_runtime"]
+    assert scenario["exit_code"] == 0
+    assert scenario["unavailable"] is True
+    assert scenario["message"] == TDX_PLUGIN_REQUIRED_MESSAGE
+    assert scenario["loaded"] == []
 
 
 def test_request_interface_unknown_tdx_suffix_does_not_load_tdx_runtime() -> None:
-    code = (
-        "import sys\n"
-        "from axdata_core.source_errors import SourceUnavailableError\n"
-        "from axdata_core.source_request import request_interface\n"
-        "try:\n"
-        "    request_interface('community_shadow_tdx')\n"
-        "except SourceUnavailableError as exc:\n"
-        "    print('unavailable=True')\n"
-        "    print('message=' + str(exc))\n"
-        "else:\n"
-        "    print('unavailable=False')\n"
-        "tracked = [\n"
-        "    'axdata_core.adapters.tdx.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx.request',\n"
-        "    'axdata_core.adapters.tdx_ext.provider_bridge',\n"
-        "    'axdata_core.adapters.tdx_ext.request',\n"
-        "    'axdata_core._tdx_wire.client',\n"
-        "]\n"
-        "print('loaded=' + ','.join(name for name in tracked if name in sys.modules))\n"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        check=True,
-        cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(REPO_ROOT / "libs" / "axdata_core"),
-        },
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert "unavailable=True" in result.stdout
-    assert f"message={TDX_PLUGIN_REQUIRED_MESSAGE}" in result.stdout
-    assert "loaded=\n" in result.stdout
+    scenario = _unknown_tdx_suffix_results()["request_interface_unknown_tdx_suffix_does_not_load_tdx_runtime"]
+    assert scenario["exit_code"] == 0
+    assert scenario["unavailable"] is True
+    assert scenario["message"] == TDX_PLUGIN_REQUIRED_MESSAGE
+    assert scenario["loaded"] == []
 
 
 def test_registry_conflict_interface_does_not_fall_back_to_legacy(monkeypatch) -> None:
