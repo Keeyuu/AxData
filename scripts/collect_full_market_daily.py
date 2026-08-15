@@ -43,6 +43,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: migrated out of the submodule working tree (plan 16 / oracle condition 3)
 DATA_ROOT = Path(os.environ.get("AXDATA_DATA_DIR") or (REPO_ROOT / "data"))
 STATE_PATH = REPO_ROOT / "logs" / "collect_full_market_state.json"
+#: table -> (dir signature, landed code set); see _landed_codes
+_LANDED_CACHE: dict[str, tuple[tuple[int, int], set[str]]] = {}
 
 
 def _load_state() -> dict:
@@ -165,10 +167,18 @@ def _landed_codes(kind: str) -> set[str]:
     table = "daily" if kind.startswith("stocks") else "index_daily"
     table_dir = DATA_ROOT / "core" / f"table={table}" / "parquet"
     files = sorted(table_dir.glob("*.parquet"))
+    signature = (len(files), max((f.stat().st_mtime_ns for f in files), default=0))
+    cached = _LANDED_CACHE.get(table)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
     if not files:
         return set()
     frames = [pd.read_parquet(f, columns=["tdx_code"]) for f in files]
-    return set(pd.concat(frames, ignore_index=True)["tdx_code"].unique())
+    landed = set(pd.concat(frames, ignore_index=True)["tdx_code"].unique())
+    # full-table rescan is expensive (~17M rows for daily); retry loops call
+    # this repeatedly, so cache keyed by directory signature (count + mtime)
+    _LANDED_CACHE[table] = (signature, landed)
+    return landed
 
 
 def _batch_already_landed(kind: str, codes: list[str]) -> bool:
