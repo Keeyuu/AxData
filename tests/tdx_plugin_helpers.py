@@ -20,6 +20,7 @@ TDX_BASE_COLLECTOR_DATASET_IDS = {
     "tdx.stock_st_list_tdx.snapshot": "tdx.stock_st_list",
     "tdx.stock_daily_share_tdx.snapshot": "tdx.stock_daily_share",
     "tdx.stock_kline_daily_tdx.snapshot": "tdx.stock_daily",
+    "tdx.stock_kline_minute_tdx.snapshot": "tdx.stock_minute",
     "tdx.stock_limit_ladder_tdx.snapshot": "tdx.stock_limit_ladder",
     "tdx.stock_theme_strength_rank_tdx.snapshot": "tdx.stock_theme_strength_rank",
     "tdx.index_kline_tdx.snapshot": "tdx.index_daily",

@@ -20,6 +20,7 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_daily_share_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
+    "stock_kline_minute_tdx",
     "index_kline_tdx",
     "index_codes_tdx",
     "stock_adj_factor_tdx",

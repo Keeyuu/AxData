@@ -14,6 +14,7 @@ TDX_COLLECTOR_INTERFACES: tuple[str, ...] = (
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
     "stock_kline_daily_tdx",
+    "stock_kline_minute_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
     "index_kline_tdx",
@@ -40,6 +41,7 @@ _TDX_DATASET_IDS: dict[str, str] = {
     "stock_st_list_tdx": "tdx.stock_st_list",
     "stock_daily_share_tdx": "tdx.stock_daily_share",
     "stock_kline_daily_tdx": "tdx.stock_daily",
+    "stock_kline_minute_tdx": "tdx.stock_minute",
     "stock_limit_ladder_tdx": "tdx.stock_limit_ladder",
     "stock_theme_strength_rank_tdx": "tdx.stock_theme_strength_rank",
     "index_kline_tdx": "tdx.index_daily",
@@ -52,6 +54,7 @@ _TDX_CATEGORIES: dict[str, str] = {
     "stock_st_list_tdx": "stock_status",
     "stock_daily_share_tdx": "share_capital",
     "stock_kline_daily_tdx": "daily",
+    "stock_kline_minute_tdx": "minute",
     "stock_limit_ladder_tdx": "shortline",
     "stock_theme_strength_rank_tdx": "theme_strength",
     "index_kline_tdx": "daily",
@@ -64,6 +67,10 @@ _TDX_DESCRIPTIONS: dict[str, str] = {
     "stock_st_list_tdx": "独立通达信采集器：采集最新 ST / *ST 股票列表并写入本地快照。",
     "stock_daily_share_tdx": "独立通达信采集器：采集每日股本盘前快照并写入本地数据层。",
     "stock_kline_daily_tdx": "独立通达信采集器：采集显式代码列表的日 K 线小样本并写入本地数据层；生产级全市场 raw/staging -> core 转换仍需后续任务补齐。",
+    "stock_kline_minute_tdx": (
+        "独立通达信采集器：采集显式代码列表的 1m/5m 分钟 K 线并写入 core 层 minute 表；"
+        "15m 及以上周期由 5m 本地合成，不采集。"
+    ),
     "stock_limit_ladder_tdx": "独立通达信采集器：采集当前连板天梯快照并写入本地数据层。",
     "stock_theme_strength_rank_tdx": "独立通达信采集器：采集当前题材强度排行快照并写入本地数据层。",
     "index_kline_tdx": "独立通达信采集器：翻页采集指数日 K 线全历史，写入 core 层 index_daily 表。",
@@ -76,6 +83,7 @@ _TDX_EXECUTION_OPTIONS: dict[str, dict[str, Any]] = {
     "stock_st_list_tdx": {"source_server_count": 1, "connections_per_server": 3},
     "stock_daily_share_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_kline_daily_tdx": {"source_server_count": 1, "connections_per_server": 1},
+    "stock_kline_minute_tdx": {"source_server_count": 1, "connections_per_server": 3},
     "stock_limit_ladder_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_theme_strength_rank_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "index_kline_tdx": {"source_server_count": 1, "connections_per_server": 3},
@@ -92,12 +100,14 @@ _TDX_REQUIRED_DATASETS: dict[str, tuple[str, ...]] = {
 
 _TDX_OUTPUT_PATH_PARTS: dict[str, list[str]] = {
     "stock_kline_daily_tdx": ["core", "table=daily"],
+    "stock_kline_minute_tdx": ["core", "table=minute"],
     "index_kline_tdx": ["core", "table=index_daily"],
     "index_codes_tdx": ["core", "table=index_catalog"],
 }
 
 _TDX_LOGICAL_TABLES: dict[str, str] = {
     "stock_kline_daily_tdx": "daily",
+    "stock_kline_minute_tdx": "minute",
     "index_kline_tdx": "index_daily",
     "index_codes_tdx": "index_catalog",
 }
@@ -105,6 +115,7 @@ _TDX_LOGICAL_TABLES: dict[str, str] = {
 
 _COLLECTOR_OUTPUT_LAYER: dict[str, str] = {
     "stock_kline_daily_tdx": "core",
+    "stock_kline_minute_tdx": "core",
     "index_kline_tdx": "core",
 }
 

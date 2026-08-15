@@ -452,6 +452,100 @@ def tdx_downloader_profiles(
             description="保存单只或显式代码列表的通达信日 K 线。默认仅小样本，不做全市场隐式展开；写入层为 core daily 的源端样本口径，生产级全市场转换仍需独立任务。",
         )
 
+    def minute_kline_profile() -> Any:
+        return downloader_profile_cls(
+            interface_name="stock_kline_minute_tdx",
+            display_name="分钟K线",
+            downloader_type="history",
+            default_params={
+                "code": "000001.SZ",
+                "period": "1m",
+                "adjust": "none",
+            },
+            default_fields=[
+                "instrument_id",
+                "symbol",
+                "tdx_code",
+                "exchange",
+                "trade_time",
+                "period",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "amount",
+            ],
+            output_layer="core",
+            output_format="parquet",
+            supported_formats=["parquet", "csv", "jsonl"],
+            default_connection_mode="long_connection",
+            concurrency=tdx_single_kline_concurrency,
+            primary_key=("instrument_id", "trade_time", "period"),
+            resource_group="tdx.quote",
+            adapter_factory="tdx",
+            runtime_source_server_max_factory="tdx",
+            default_output_path_parts=_core_table_output_path_parts("minute"),
+            snapshot_date_meta_keys=["trade_date", "data_date", "snapshot_date", "date"],
+            file_stem_template="{interface_name}_{snapshot_date}",
+            required_columns=["instrument_id", "trade_time", "period"],
+            expected_columns=[
+                "instrument_id",
+                "symbol",
+                "tdx_code",
+                "exchange",
+                "trade_time",
+                "period",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "amount",
+            ],
+            datetime_field="trade_time",
+            date_field="trade_time",
+            numeric_positive_columns=["open", "high", "low", "close", "volume", "amount"],
+            field_mappings={
+                "instrument_id": "ts_code",
+                "trade_time": "trade_date",
+                "volume": "vol",
+            },
+            params=[
+                [
+                    "code",
+                    "string/list",
+                    "是",
+                    "证券代码：默认 000001.SZ；批量可传列表或英文逗号分隔字符串",
+                ],
+                [
+                    "period",
+                    "string",
+                    "否",
+                    "分钟周期：1m、5m；默认 1m；15m 及以上由 5m 本地合成，不采集",
+                ],
+                [
+                    "adjust",
+                    "string",
+                    "否",
+                    "复权参数：none 不复权、qfq 前复权、hfq 后复权、"
+                    "fixed_qfq 定点前复权；默认 none",
+                ],
+                [
+                    "anchor_date",
+                    "string",
+                    "否",
+                    "定点前复权锚点日期，仅 adjust=fixed_qfq 时使用，格式 YYYYMMDD 或 YYYY-MM-DD",
+                ],
+            ],
+            description=(
+                "保存单只或显式代码列表的通达信 1m/5m 分钟 K 线，写入 core 层 minute 表。"
+                "接口无 count 参数，股票类自动翻页到服务器保留上限"
+                "（1m≈95 交易日、5m≈495 交易日）；"
+                "15m 及以上由 5m 本地合成，不采集。"
+            ),
+        )
+
     def index_kline_daily_profile() -> Any:
         return downloader_profile_cls(
             interface_name="index_kline_tdx",
@@ -748,6 +842,7 @@ def tdx_downloader_profiles(
         "stock_daily_share_tdx": daily_share_profile(),
         "stock_capital_changes_tdx": capital_changes_profile(),
         "stock_kline_daily_tdx": daily_kline_profile(),
+        "stock_kline_minute_tdx": minute_kline_profile(),
         "index_kline_tdx": index_kline_daily_profile(),
         "index_codes_tdx": index_codes_profile(),
         "stock_adj_factor_tdx": adj_factor_profile(),

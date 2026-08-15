@@ -196,7 +196,7 @@ def test_tdx_provider_catalog_projection_does_not_load_downloader_runtime() -> N
     result = _core_without_site_subprocess(code)
 
     assert "interfaces=90" in result.stdout
-    assert "profiles=11" in result.stdout
+    assert "profiles=12" in result.stdout
     assert "collectors=0" in result.stdout
     assert "axdata_core.sources.tdx.catalog" not in result.stdout
     assert "axdata_core.tdx_f10_catalog" not in result.stdout
@@ -6139,7 +6139,7 @@ def test_tdx_provider_package_manifest_matches_provider(monkeypatch, tmp_path, c
         )
         == 0
     )
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=11 collectors=0" in capsys.readouterr().out
+    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in capsys.readouterr().out
     assert "axdata_source_tdx.provider" in sys.modules
     assert "axdata_source_tdx.adapter" not in sys.modules
 
@@ -6542,6 +6542,42 @@ def test_tdx_collector_specs_include_index_kline_and_index_codes() -> None:
     assert codes.required_datasets == ()
     assert codes.quality["required_columns"] == ["instrument_id"]
 
+
+def test_tdx_collector_specs_include_stock_kline_minute() -> None:
+    sys.path.insert(0, str(TDX_PACKAGE_ROOT / "src"))
+
+    from axdata_source_tdx.collectors import TDX_COLLECTOR_INTERFACES, tdx_collector_specs
+
+    assert "stock_kline_minute_tdx" in TDX_COLLECTOR_INTERFACES
+
+    specs = {spec.name: spec for spec in tdx_collector_specs()}
+
+    minute = specs["tdx.stock_kline_minute_tdx.snapshot"]
+    assert minute.collector_plugin_id == TDX_COLLECTOR_PLUGIN_ID
+    assert minute.runner_entry == TDX_COLLECTOR_RUNNER_ENTRY
+    assert minute.dataset_id == "tdx.stock_minute"
+    assert minute.category == "minute"
+    assert minute.resource_group == "tdx.quote"
+    assert minute.default_params == {
+        "code": "000001.SZ",
+        "period": "1m",
+        "adjust": "none",
+    }
+    assert minute.output["layer"] == "core"
+    assert minute.output["default_output_path_parts"] == ["core", "table=minute"]
+    assert minute.output["primary_key"] == ["instrument_id", "trade_time", "period"]
+    assert minute.output["default_dir_name"] == "tdx.stock_minute"
+    assert minute.quality["required_columns"] == ["instrument_id", "trade_time", "period"]
+    assert minute.quality["date_field"] == "trade_time"
+    assert minute.quality["datetime_field"] == "trade_time"
+    assert minute.required_datasets == ()
+    dataset = minute.output["datasets"][0]
+    assert dataset["dataset_id"] == "tdx.stock_minute"
+    assert dataset["table"] == "minute"
+    assert dataset["layer"] == "core"
+    assert dataset["primary_key"] == ["instrument_id", "trade_time", "period"]
+
+
 @pytest.mark.packaging
 def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_wheel) -> None:
     wheel_path = built_wheel("tdx").wheel_path
@@ -6692,6 +6728,7 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_w
         "stock_daily_share_tdx",
         "stock_capital_changes_tdx",
         "stock_kline_daily_tdx",
+        "stock_kline_minute_tdx",
         "stock_adj_factor_tdx",
         "stock_limit_ladder_tdx",
         "stock_theme_strength_rank_tdx",
