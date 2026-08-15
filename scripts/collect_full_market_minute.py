@@ -550,7 +550,10 @@ def _aggregate_5m_to_15m(df5):
     import pandas as pd
 
     work = df5.copy()
-    bucket = pd.to_datetime(work["trade_time"]).dt.floor("15min")
+    # bars are CLOSE-time labeled; the last 5m bar of a 15m bucket closes
+    # exactly on the bucket boundary, so the bucket key must CEIL (floor
+    # would push boundary bars like 09:45 into the wrong next bucket)
+    bucket = pd.to_datetime(work["trade_time"]).dt.ceil("15min")
     grouped = work.groupby(bucket).agg(
         open=("open", "first"),
         high=("high", "max"),

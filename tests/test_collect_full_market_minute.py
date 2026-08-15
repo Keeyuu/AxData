@@ -183,13 +183,16 @@ def test_verify_period_passes_on_clean_fixture(monkeypatch, tmp_path) -> None:
 
 
 def test_aggregate_5m_to_15m_ohlc_matches_hand_computed_bucket() -> None:
+    # TDX bars are CLOSE-time labeled: bars closing 09:35/09:40/09:45 make up
+    # the first 15m bucket (close 09:45); a bar closing 09:50 opens the next
+    # bucket (10:00).
     rows = [
         (
             "000001.SZ",
             "sym",
             "sz000001",
             "SSE",
-            "2026-07-01 10:00:00",
+            "2026-07-01 09:35:00",
             "5m",
             1.0,
             1.5,
@@ -203,7 +206,7 @@ def test_aggregate_5m_to_15m_ohlc_matches_hand_computed_bucket() -> None:
             "sym",
             "sz000001",
             "SSE",
-            "2026-07-01 10:05:00",
+            "2026-07-01 09:40:00",
             "5m",
             2.0,
             2.5,
@@ -217,7 +220,7 @@ def test_aggregate_5m_to_15m_ohlc_matches_hand_computed_bucket() -> None:
             "sym",
             "sz000001",
             "SSE",
-            "2026-07-01 10:10:00",
+            "2026-07-01 09:45:00",
             "5m",
             3.0,
             3.5,
@@ -226,13 +229,13 @@ def test_aggregate_5m_to_15m_ohlc_matches_hand_computed_bucket() -> None:
             100.0,
             1000.0,
         ),
-        # bar starting 10:15 belongs to the next 15m bucket
+        # bar closing 09:50 belongs to the next 15m bucket (close 10:00)
         (
             "000001.SZ",
             "sym",
             "sz000001",
             "SSE",
-            "2026-07-01 10:15:00",
+            "2026-07-01 09:50:00",
             "5m",
             9.0,
             9.5,
@@ -260,9 +263,9 @@ def test_aggregate_5m_to_15m_ohlc_matches_hand_computed_bucket() -> None:
         ],
     )
     aggregated = minute._aggregate_5m_to_15m(frame)
-    bucket = pd.Timestamp("2026-07-01 10:00:00")
+    bucket = pd.Timestamp("2026-07-01 09:45:00")
     assert list(aggregated.loc[bucket, ["open", "high", "low", "close"]]) == [1.0, 3.5, 0.5, 3.2]
-    next_bucket = pd.Timestamp("2026-07-01 10:15:00")
+    next_bucket = pd.Timestamp("2026-07-01 10:00:00")
     values = aggregated.loc[next_bucket, ["open", "high", "low", "close"]]
     assert list(values) == [9.0, 9.5, 8.5, 9.2]
 
