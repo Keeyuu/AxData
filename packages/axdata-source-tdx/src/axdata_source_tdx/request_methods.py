@@ -470,7 +470,7 @@ def request_index_kline(
     from .kline_helpers import index_like_kline_request_result, sequential_kline_rows_and_meta
     from .normalize_utils import get_value
     from .request_filters import requested_kline_codes
-    from .request_params import TDX_KLINE_MAX_COUNT, index_kline_period, int_param
+    from .request_params import TDX_KLINE_MAX_COUNT, bool_param, index_kline_period, int_param
     from .time_series_normalize import normalize_index_kline_row
 
     result = index_like_kline_request_result(
@@ -479,6 +479,7 @@ def request_index_kline(
         requested_codes=requested_kline_codes,
         index_kline_period=index_kline_period,
         int_param=int_param,
+        bool_param=bool_param,
         max_count=TDX_KLINE_MAX_COUNT,
         rows_meta_func=sequential_kline_rows_and_meta,
         normalize_row=normalize_index_kline_row,
@@ -1238,7 +1239,7 @@ def request_etf_kline(
     from .kline_helpers import index_like_kline_request_result, sequential_kline_rows_and_meta
     from .normalize_utils import get_value
     from .request_filters import requested_kline_codes
-    from .request_params import TDX_KLINE_MAX_COUNT, index_kline_period, int_param
+    from .request_params import TDX_KLINE_MAX_COUNT, bool_param, index_kline_period, int_param
     from .time_series_normalize import normalize_index_kline_row
 
     result = index_like_kline_request_result(
@@ -1247,6 +1248,7 @@ def request_etf_kline(
         requested_codes=requested_kline_codes,
         index_kline_period=index_kline_period,
         int_param=int_param,
+        bool_param=bool_param,
         max_count=TDX_KLINE_MAX_COUNT,
         rows_meta_func=sequential_kline_rows_and_meta,
         normalize_row=normalize_index_kline_row,

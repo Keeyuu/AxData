@@ -23,6 +23,8 @@ TDX_BASE_COLLECTOR_DATASET_IDS = {
     "tdx.stock_kline_daily_tdx.snapshot": "tdx.stock_daily",
     "tdx.stock_limit_ladder_tdx.snapshot": "tdx.stock_limit_ladder",
     "tdx.stock_theme_strength_rank_tdx.snapshot": "tdx.stock_theme_strength_rank",
+    "tdx.index_kline_tdx.snapshot": "tdx.index_daily",
+    "tdx.index_codes_tdx.snapshot": "tdx.index_catalog",
 }
 TDX_LEGACY_COLLECTOR_NAMES: set[str] = set()
 

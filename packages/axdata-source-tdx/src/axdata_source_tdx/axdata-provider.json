@@ -191,8 +191,8 @@
       "asset_class": "index",
       "request_mode": "source_request",
       "collection": {
-        "supported": false,
-        "default_profile": null
+        "supported": true,
+        "default_profile": "index_codes_tdx.snapshot"
       },
       "parameters": [
         {
@@ -1511,8 +1511,8 @@
       "asset_class": "index",
       "request_mode": "source_request",
       "collection": {
-        "supported": false,
-        "default_profile": null
+        "supported": true,
+        "default_profile": "index_kline_tdx.snapshot"
       },
       "parameters": [
         {
@@ -1550,6 +1550,18 @@
           "control": null,
           "placeholder": null,
           "description": "返回条数，默认 120，适合源端直取预览；需要更长历史时显式传 count。"
+        },
+        {
+          "name": "full_history",
+          "display_name_zh": "翻页拉取指数全部历史，忽略 count 的截断语义；默认 false。",
+          "type": "boolean",
+          "required": false,
+          "multiple": false,
+          "default": false,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "翻页拉取指数全部历史，忽略 count 的截断语义；默认 false。"
         }
       ],
       "fields": [
@@ -23668,6 +23680,155 @@
           "highest_ladder_level",
           "seal_amount_sum",
           "amount_sum"
+        ],
+        "field_mappings": {}
+      }
+    },
+    {
+      "name": "index_kline_tdx.snapshot",
+      "interface_name": "index_kline_tdx",
+      "display_name_zh": "指数日K线",
+      "resource_group": "tdx.quote",
+      "mode": "history",
+      "default_options": {
+        "params": {
+          "code": "sh000001",
+          "period": "day",
+          "full_history": true
+        },
+        "fields": [
+          "instrument_id",
+          "symbol",
+          "tdx_code",
+          "exchange",
+          "trade_time",
+          "period",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "amount",
+          "up_count",
+          "down_count"
+        ],
+        "formats": [
+          "parquet"
+        ],
+        "connection_mode": "long_connection",
+        "source_server_count": 1,
+        "connections_per_server": 1,
+        "max_concurrent_tasks": 1,
+        "batch_size": 1,
+        "request_interval_ms": 0,
+        "retry_count": 0,
+        "timeout_ms": 30000
+      },
+      "default_limits": {
+        "max_active_jobs": 1,
+        "max_connections_total": 1,
+        "request_interval_ms": 0,
+        "max_retries": 0
+      },
+      "output": {
+        "default_dir_name": "index_kline_tdx",
+        "file_name_template": "{interface_name}_{data_date}_{run_time}",
+        "supported_formats": [
+          "parquet",
+          "csv",
+          "jsonl"
+        ],
+        "output_layer": "core",
+        "primary_key": [
+          "instrument_id",
+          "trade_time"
+        ],
+        "required_columns": [
+          "instrument_id",
+          "trade_time",
+          "period"
+        ],
+        "expected_columns": [
+          "instrument_id",
+          "symbol",
+          "tdx_code",
+          "exchange",
+          "trade_time",
+          "period",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "amount",
+          "up_count",
+          "down_count"
+        ],
+        "datetime_field": "trade_time",
+        "numeric_positive_columns": [
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "amount"
+        ],
+        "field_mappings": {}
+      }
+    },
+    {
+      "name": "index_codes_tdx.snapshot",
+      "interface_name": "index_codes_tdx",
+      "display_name_zh": "指数列表",
+      "resource_group": "tdx.quote",
+      "mode": "snapshot",
+      "default_options": {
+        "params": {
+          "include_tdx_block_index": true
+        },
+        "fields": null,
+        "formats": [
+          "parquet"
+        ],
+        "connection_mode": "long_connection",
+        "source_server_count": 1,
+        "connections_per_server": 3,
+        "max_concurrent_tasks": 3,
+        "batch_size": 1,
+        "request_interval_ms": 0,
+        "retry_count": 0,
+        "timeout_ms": 30000
+      },
+      "default_limits": {
+        "max_active_jobs": 1,
+        "max_connections_total": 3,
+        "request_interval_ms": 0,
+        "max_retries": 0
+      },
+      "output": {
+        "default_dir_name": "index_codes_tdx",
+        "file_name_template": "{interface_name}_{data_date}_{run_time}",
+        "supported_formats": [
+          "parquet",
+          "csv",
+          "jsonl"
+        ],
+        "output_layer": "snapshot",
+        "primary_key": "instrument_id",
+        "required_columns": [
+          "instrument_id"
+        ],
+        "expected_columns": [
+          "instrument_id",
+          "symbol",
+          "tdx_code",
+          "exchange",
+          "name",
+          "index_type",
+          "previous_close"
+        ],
+        "numeric_positive_columns": [
+          "previous_close"
         ],
         "field_mappings": {}
       }

@@ -569,6 +569,8 @@ def test_tdx_plugin_provider_exposes_collection_profiles_in_manifest() -> None:
         "stock_adj_factor_tdx",
         "stock_limit_ladder_tdx",
         "stock_theme_strength_rank_tdx",
+        "index_kline_tdx",
+        "index_codes_tdx",
     }
     assert interfaces["stock_codes_tdx"].collection.supported is True
     assert interfaces["stock_codes_tdx"].collection.default_profile == "stock_codes_tdx.snapshot"
@@ -580,6 +582,10 @@ def test_tdx_plugin_provider_exposes_collection_profiles_in_manifest() -> None:
     assert interfaces["stock_adj_factor_tdx"].collection.default_profile == "stock_adj_factor_tdx.snapshot"
     assert interfaces["stock_capital_changes_tdx"].menu_path == ("通达信", "股票数据", "基础数据")
     assert interfaces["index_kline_tdx"].menu_path == ("通达信", "指数数据", "行情数据")
+    assert interfaces["index_kline_tdx"].collection.supported is True
+    assert interfaces["index_kline_tdx"].collection.default_profile == "index_kline_tdx.snapshot"
+    assert interfaces["index_codes_tdx"].collection.supported is True
+    assert interfaces["index_codes_tdx"].collection.default_profile == "index_codes_tdx.snapshot"
     assert interfaces["etf_auction_process_tdx"].menu_path == ("通达信", "ETF数据", "竞价数据")
     assert downloaders["stock_codes_tdx"].resource_group == "tdx.quote"
     assert downloaders["stock_limit_ladder_tdx"].resource_group == "tdx.f10"
@@ -662,7 +668,7 @@ def test_tdx_plugin_provider_projection_does_not_load_downloader_runtime() -> No
     assert scenario["exit_code"] == 0
     assert scenario["provider_id"] == TDX_PROVIDER_ID
     assert scenario["interfaces"] == 90
-    assert scenario["downloaders"] == 10
+    assert scenario["downloaders"] == 12
     assert scenario["collectors"] == 0
     assert "axdata_core.sources.tdx.catalog" not in scenario["loaded"]
     assert "axdata_core.tdx_f10_catalog" not in scenario["loaded"]

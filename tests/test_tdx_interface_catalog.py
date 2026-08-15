@@ -153,10 +153,16 @@ def test_source_request_catalog_registers_index_tdx_interfaces():
 
     kline = get_request_interface("index_kline_tdx")
     assert kline.display_name_zh == "指数K线"
-    assert kline.parameter_names == ("code", "period", "count")
+    assert kline.parameter_names == ("code", "period", "count", "full_history")
     count_param = next(parameter for parameter in kline.parameters if parameter.name == "count")
     assert count_param.default == 120
     assert "预览" in count_param.description_zh
+    full_history_param = next(
+        parameter for parameter in kline.parameters if parameter.name == "full_history"
+    )
+    assert full_history_param.dtype == "boolean"
+    assert full_history_param.default is False
+    assert "全部历史" in full_history_param.description_zh
     assert "up_count" in kline.field_names
     assert "down_count" in kline.field_names
 

@@ -6,6 +6,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .request_params import TDX_KLINE_WIRE_PAGE_LIMIT
+
 
 class KlineResultLike(Protocol):
     index: int
@@ -140,6 +142,7 @@ def index_like_kline_request_result(
     requested_codes: Callable[[Any], Sequence[str]],
     index_kline_period: Callable[[Any], str],
     int_param: Callable[..., int],
+    bool_param: Callable[..., bool],
     max_count: int,
     rows_meta_func: Callable[..., tuple[list[dict[str, Any]], dict[str, Any]]],
     normalize_row: Callable[[Any], dict[str, Any]],
@@ -151,19 +154,21 @@ def index_like_kline_request_result(
     tdx_codes = requested_codes(params.get("code"))
     period = index_kline_period(params.get("period", "day"))
     page_size = int_param(params, "count", 120, minimum=1, maximum=max_count)
+    full_history = bool_param(params.get("full_history", False), name="full_history")
+    wire_page_size = min(page_size, TDX_KLINE_WIRE_PAGE_LIMIT)
 
     rows, meta = rows_meta_func(
         client,
         tdx_codes,
         period=period,
-        page_size=page_size,
+        page_size=wire_page_size,
         adjust="none",
         anchor_date=None,
         kind=request_kind,
         normalize_row=normalize_row,
         request_code_history=request_code_history,
         get_value=get_value,
-        tail_count_per_code=page_size,
+        tail_count_per_code=None if full_history else page_size,
         extra_meta={"tdx_kline_kind": meta_kind},
     )
     return KlineRequestRowsResult(rows=rows, meta=meta)

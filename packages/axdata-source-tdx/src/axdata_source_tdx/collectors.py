@@ -17,6 +17,8 @@ TDX_COLLECTOR_INTERFACES: tuple[str, ...] = (
     "stock_kline_daily_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
+    "index_kline_tdx",
+    "index_codes_tdx",
 )
 
 TDX_INDEPENDENT_COLLECTOR_INTERFACES: tuple[str, ...] = TDX_COLLECTOR_INTERFACES
@@ -43,6 +45,8 @@ _TDX_DATASET_IDS: dict[str, str] = {
     "stock_kline_daily_tdx": "tdx.stock_daily",
     "stock_limit_ladder_tdx": "tdx.stock_limit_ladder",
     "stock_theme_strength_rank_tdx": "tdx.stock_theme_strength_rank",
+    "index_kline_tdx": "tdx.index_daily",
+    "index_codes_tdx": "tdx.index_catalog",
 }
 
 _TDX_CATEGORIES: dict[str, str] = {
@@ -54,6 +58,8 @@ _TDX_CATEGORIES: dict[str, str] = {
     "stock_kline_daily_tdx": "daily",
     "stock_limit_ladder_tdx": "shortline",
     "stock_theme_strength_rank_tdx": "theme_strength",
+    "index_kline_tdx": "daily",
+    "index_codes_tdx": "index_reference",
 }
 
 _TDX_DESCRIPTIONS: dict[str, str] = {
@@ -65,6 +71,8 @@ _TDX_DESCRIPTIONS: dict[str, str] = {
     "stock_kline_daily_tdx": "独立通达信采集器：采集显式代码列表的日 K 线小样本并写入本地数据层；生产级全市场 raw/staging -> core 转换仍需后续任务补齐。",
     "stock_limit_ladder_tdx": "独立通达信采集器：采集当前连板天梯快照并写入本地数据层。",
     "stock_theme_strength_rank_tdx": "独立通达信采集器：采集当前题材强度排行快照并写入本地数据层。",
+    "index_kline_tdx": "独立通达信采集器：翻页采集指数日 K 线全历史，写入 core 层 index_daily 表。",
+    "index_codes_tdx": "独立通达信采集器：采集指数列表快照（含板块/题材指数）写入本地数据层。",
 }
 
 _TDX_EXECUTION_OPTIONS: dict[str, dict[str, Any]] = {
@@ -76,6 +84,8 @@ _TDX_EXECUTION_OPTIONS: dict[str, dict[str, Any]] = {
     "stock_kline_daily_tdx": {"source_server_count": 1, "connections_per_server": 1},
     "stock_limit_ladder_tdx": {"source_server_count": 4, "connections_per_server": 2},
     "stock_theme_strength_rank_tdx": {"source_server_count": 4, "connections_per_server": 2},
+    "index_kline_tdx": {"source_server_count": 1, "connections_per_server": 3},
+    "index_codes_tdx": {"source_server_count": 1, "connections_per_server": 3},
 }
 
 _TDX_CALENDAR_CHECK_INTERFACES: set[str] = {
@@ -88,15 +98,20 @@ _TDX_REQUIRED_DATASETS: dict[str, tuple[str, ...]] = {
 
 _TDX_OUTPUT_PATH_PARTS: dict[str, list[str]] = {
     "stock_kline_daily_tdx": ["core", "table=daily"],
+    "index_kline_tdx": ["core", "table=index_daily"],
+    "index_codes_tdx": ["core", "table=index_catalog"],
 }
 
 _TDX_LOGICAL_TABLES: dict[str, str] = {
     "stock_kline_daily_tdx": "daily",
+    "index_kline_tdx": "index_daily",
+    "index_codes_tdx": "index_catalog",
 }
 
 
 _COLLECTOR_OUTPUT_LAYER: dict[str, str] = {
     "stock_kline_daily_tdx": "core",
+    "index_kline_tdx": "core",
 }
 
 

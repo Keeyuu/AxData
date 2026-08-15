@@ -23,7 +23,7 @@
 
 交易所 3 个核心能力保留为 Source Provider 接口、source_request 临时查询和兼容 DownloaderProfile，不再作为默认 CollectorSpec 进入 CollectorRegistry。`axdata.source.exchange` 禁用或移除后，交易所源端接口路由会消失；采集页不会保留独立交易所采集器。交易所 3 个 DownloaderProfile 保留，供 `/v1/downloaders` 和旧显式下载入口兼容。
 
-TDX 核心采集器由预装独立 collector plugin `axdata.collector.tdx` 提供。当前采集页保留 8 个 TDX 独立采集器：`tdx.stock_codes_tdx.snapshot`、`tdx.stock_suspensions_tdx.snapshot`、`tdx.stock_st_list_tdx.snapshot`、`tdx.stock_daily_share_tdx.snapshot`、`tdx.stock_daily_price_limit_tdx.snapshot`、`tdx.stock_kline_daily_tdx.snapshot`、`tdx.stock_limit_ladder_tdx.snapshot`、`tdx.stock_theme_strength_rank_tdx.snapshot`。`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 保留为源端接口和兼容 DownloaderProfile，但不再作为采集器展示。这些采集器使用 `axdata_source_tdx.collectors:run_tdx_collector` 作为 `runner_entry`，直接调用 TDX provider package adapter/request 逻辑，不通过 `/v1/request`、SDK、ProviderRegistry route 或 DownloaderProfile 采集。TDX DownloaderProfile 仍保留，供 `/v1/downloaders` 和旧显式下载入口兼容。日线仍是显式代码小样本写入路径，不代表全市场 raw/staging -> core 转换已经完成。
+TDX 核心采集器由预装独立 collector plugin `axdata.collector.tdx` 提供。当前采集页保留 10 个 TDX 独立采集器：`tdx.stock_codes_tdx.snapshot`、`tdx.stock_suspensions_tdx.snapshot`、`tdx.stock_st_list_tdx.snapshot`、`tdx.stock_daily_share_tdx.snapshot`、`tdx.stock_daily_price_limit_tdx.snapshot`、`tdx.stock_kline_daily_tdx.snapshot`、`tdx.stock_limit_ladder_tdx.snapshot`、`tdx.stock_theme_strength_rank_tdx.snapshot`、`tdx.index_kline_tdx.snapshot`、`tdx.index_codes_tdx.snapshot`。`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 保留为源端接口和兼容 DownloaderProfile，但不再作为采集器展示。这些采集器使用 `axdata_source_tdx.collectors:run_tdx_collector` 作为 `runner_entry`，直接调用 TDX provider package adapter/request 逻辑，不通过 `/v1/request`、SDK、ProviderRegistry route 或 DownloaderProfile 采集。TDX DownloaderProfile 仍保留，供 `/v1/downloaders` 和旧显式下载入口兼容。日线仍是显式代码小样本写入路径，不代表全市场 raw/staging -> core 转换已经完成。
 
 当前默认采集口径：
 
@@ -99,7 +99,7 @@ TDX 核心采集器由预装独立 collector plugin `axdata.collector.tdx` 提�
 
 | 接口族 | 中文说明 | 数据源/provider | 底层实现 | manifest/catalog | source_request | schema字段 | Collector/Downloader | Parquet/CSV/DuckDB | DuckDB | 离线测试 | 真实源 smoke | 状态 | 优先级 | 缺口说明 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TDX 普通行情 90 个接口 | 股票、指数、ETF、K 线、F10、短线等 | `axdata.source.tdx_external` + `axdata.collector.tdx` | 外部 TDX 包 adapter | 外部包 manifest 90 接口；TDX 8 个独立 collector catalog | source 插件可用后精确路由；TDX 独立采集器不依赖 source Provider 启用状态 | 插件 catalog 字段；`daily`/`adj_factor` core schema 已有 | 10 个 DownloaderProfile；8 个 independent CollectorSpec：`stock_codes_tdx`、`stock_suspensions_tdx`、`stock_st_list_tdx`、`stock_daily_share_tdx`、`stock_daily_price_limit_tdx`、`stock_kline_daily_tdx`、`stock_limit_ladder_tdx`、`stock_theme_strength_rank_tdx`；`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 仅保留源端接口/兼容下载；0 个 legacy Provider-manifest CollectorSpec | Parquet 主数据；CSV/DuckDB 可选；兼容下载仍支持旧格式 | 已有 downloader 写出测试和核心离线闭环；TDX runner_entry 离线测试覆盖；日线离线样例写出后可读回；profile 和 independent spec 已声明 required/date/numeric/field mapping quality contract | 包级、路由、downloader、collector、离线 collection 测试 | `daily` 可显式小样本检查；TDX 真实请求需插件可用且连接可用 | partial | P0/P1 | TDX 日线仍保留源端 `instrument_id/trade_time/volume` 并通过 mapping 对齐 `daily.ts_code/trade_date/vol`；复权因子接口和 schema 保留，但不再作为采集器；全市场 raw/staging -> core 转换仍未完成。 |
+| TDX 普通行情 90 个接口 | 股票、指数、ETF、K 线、F10、短线等 | `axdata.source.tdx_external` + `axdata.collector.tdx` | 外部 TDX 包 adapter | 外部包 manifest 90 接口；TDX 10 个独立 collector catalog | source 插件可用后精确路由；TDX 独立采集器不依赖 source Provider 启用状态 | 插件 catalog 字段；`daily`/`index_daily`/`index_catalog`/`adj_factor` core schema 已有 | 12 个 DownloaderProfile；10 个 independent CollectorSpec：`stock_codes_tdx`、`stock_suspensions_tdx`、`stock_st_list_tdx`、`stock_daily_share_tdx`、`stock_daily_price_limit_tdx`、`stock_kline_daily_tdx`、`stock_limit_ladder_tdx`、`stock_theme_strength_rank_tdx`、`index_kline_tdx`、`index_codes_tdx`；`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 仅保留源端接口/兼容下载；0 个 legacy Provider-manifest CollectorSpec | Parquet 主数据；CSV/DuckDB 可选；兼容下载仍支持旧格式 | 已有 downloader 写出测试和核心离线闭环；TDX runner_entry 离线测试覆盖；日线离线样例写出后可读回；profile 和 independent spec 已声明 required/date/numeric/field mapping quality contract | 包级、路由、downloader、collector、离线 collection 测试 | `daily` 可显式小样本检查；TDX 真实请求需插件可用且连接可用 | partial | P0/P1 | TDX 日线仍保留源端 `instrument_id/trade_time/volume` 并通过 mapping 对齐 `daily.ts_code/trade_date/vol`；指数日线与目录采集器新增 `index_daily`/`index_catalog` 表，指数日线默认 full_history 翻页拉取全历史；复权因子接口和 schema 保留，但不再作为采集器；全市场 raw/staging -> core 转换仍未完成。 |
 | TDX Ext 31 个接口 | 期货、期权、基金、债券、外汇、宏观扩展行情 | `axdata.source.tdx_ext_external` | 外部 TDX Ext 包 adapter/cache | 外部包 manifest 31 接口 | 启用插件后精确路由 | 插件 catalog 字段 | DownloaderProfile 0，CollectorSpec 0 | 未接统一写出 | 未接 | 包级 catalog/route/import 边界测试 | 无默认目标 | adapter-only | P2 | 先保持源端预览，再按资产优先级补 profile。 |
 | 外部 Tencent 包 | 腾讯实时快照 | `axdata.source.tencent_external` | 外部 Tencent adapter | 外部包 manifest 1 接口 | 启用并处理冲突后可路由 | 插件 catalog 字段 | DownloaderProfile 0，CollectorSpec 0 | 未同步 | 未同步 | 包级 discovery/call/check 测试 | 无默认目标 | partial | P2 | 预装 Tencent 插件已补轻量闭环，外部包 manifest 尚未同步 downloader/collector。 |
 | 外部 Cninfo 包 | 巨潮公告列表/PDF 元信息 | `axdata.source.cninfo_external` | 外部 Cninfo adapter | 外部包 manifest 2 接口 | 启用并处理冲突后可路由 | 插件 catalog 字段 | DownloaderProfile 0，CollectorSpec 0 | 未同步 | 未同步 | 包级 discovery/call/check 测试 | 无默认目标 | partial | P2 | 预装 Cninfo 插件已补轻量闭环，外部包 manifest 尚未同步 downloader/collector。 |
@@ -107,7 +107,7 @@ TDX 核心采集器由预装独立 collector plugin `axdata.collector.tdx` 提�
 
 ## 第二批 TDX 普通行情接口
 
-本节选择 TDX 普通行情中已经有源端实现、字段结构稳定且能离线测试的 P0 核心表相关接口。默认参数均为单只 `000001.SZ` 小样本，避免 Downloader/Collector catalog 被查看或调度时隐式展开全市场请求。TDX source provider manifest 当前为 90 interfaces / 10 downloaders / 0 collectors；8 个 TDX 核心采集器由 `axdata.collector.tdx` 独立 collector plugin 提供，`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 仅保留源端接口/兼容 DownloaderProfile。
+本节选择 TDX 普通行情中已经有源端实现、字段结构稳定且能离线测试的 P0 核心表相关接口。默认参数均为单只 `000001.SZ` 小样本，避免 Downloader/Collector catalog 被查看或调度时隐式展开全市场请求。TDX source provider manifest 当前为 90 interfaces / 12 downloaders / 0 collectors；10 个 TDX 核心采集器由 `axdata.collector.tdx` 独立 collector plugin 提供，`stock_capital_changes_tdx` 与 `stock_adj_factor_tdx` 仅保留源端接口/兼容 DownloaderProfile。
 
 | interface_name | 中文说明 | 数据源/provider | 闭环状态 | 默认参数 | 输出层 | 主键 | 离线测试 | 仍待完成 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -131,11 +131,11 @@ TDX 核心采集器由预装独立 collector plugin `axdata.collector.tdx` 提�
 | 三批已增强 source-only 小样本接口 | 26 | 第一批 8、第二批 10、第三批 8；全部是临时调用，不写入数据层。 |
 | query_only 候选 | 4 | F10/财务/信息流口径尚未收敛，继续保持查询或目录预览，不新增采集器。 |
 | callability_candidate 剩余 | 0 | 上一阶段 8 个候选已全部在第三批移入 source_request callable 状态。 |
-| future_collectable 候选 | 8 | 以后可能补 profile、转换策略或生产验证，但本里程碑不扩采集器或 task template。 |
+| future_collectable 候选 | 7 | 以后可能补 profile、转换策略或生产验证，但本里程碑不扩采集器或 task template。 |
 | 有兼容 DownloaderProfile 的接口 | 13 | 预装交易所 3、TDX 10；`collection.supported=true` 只表示存在显式下载兼容信息，不等于 CollectorSpec 或 scheduled task。巨潮、腾讯、东方财富、新浪 7 个预装接口为 source_request-only。 |
-| CollectorSpec | 8 | TDX independent 8；交易所、复权因子和非核心 7 个预装源默认 CollectorSpec 均已下线。 |
+| CollectorSpec | 10 | TDX independent 10；交易所、复权因子和非核心 7 个预装源默认 CollectorSpec 均已下线。 |
 
-TDX 被显式禁用时，普通 TDX 接口仍可作为不可用目录项保留，标记 `plugin_status=disabled`、`enabled=false`，并给出 `axdata plugin enable axdata.source.tdx_external`。其中预装交易所接口为 `collection.supported=true`；巨潮、腾讯、东方财富等 source-only 接口为 `collection.supported=false`。`stock_kline_daily_tdx`、`stock_adj_factor_tdx` 等已有 profile 的 TDX 接口只表示“插件可用后可显式下载/源端请求”，不表示接口本身就是采集器。默认采集器 catalog 只包含 `axdata.collector.tdx` 提供的 TDX 8 个采集器，可通过禁用 `axdata.collector.tdx` 独立隐藏。
+TDX 被显式禁用时，普通 TDX 接口仍可作为不可用目录项保留，标记 `plugin_status=disabled`、`enabled=false`，并给出 `axdata plugin enable axdata.source.tdx_external`。其中预装交易所接口为 `collection.supported=true`；巨潮、腾讯、东方财富等 source-only 接口为 `collection.supported=false`。`stock_kline_daily_tdx`、`stock_adj_factor_tdx` 等已有 profile 的 TDX 接口只表示“插件可用后可显式下载/源端请求”，不表示接口本身就是采集器。默认采集器 catalog 只包含 `axdata.collector.tdx` 提供的 TDX 10 个采集器，可通过禁用 `axdata.collector.tdx` 独立隐藏。
 
 ## Source Request 可调用性增强第一批 2026-06-29
 
@@ -147,7 +147,7 @@ TDX 被显式禁用时，普通 TDX 接口仍可作为不可用目录项保留�
 | `stock_realtime_rank_tdx` | 通达信 | adapter-only -> source_request callable | `category=a_share,count=3` | 已覆盖 | 离线 gateway/API/SDK | 否 | 默认榜单仍为 80 行，`count="all"` 必须显式传入。 |
 | `stock_order_book_tdx` | 通达信 | adapter-only -> source_request callable | `code=000001.SZ` | 已覆盖 | 离线 gateway/API/CLI | 否 | 五档盘口只做当前快照。 |
 | `index_realtime_snapshot_tdx` | 通达信 | adapter-only -> source_request callable | `code=000001.SH` | 已覆盖 | 离线 gateway/API/SDK | 否 | 指数实时快照只做小代码列表查询。 |
-| `index_kline_tdx` | 通达信 | adapter-only -> source_request callable | `code=000001.SH,period=day,count=20`；默认 `count=120` | 已覆盖 | 离线 gateway/API/SDK；adapter 默认 count 测试 | 否 | 默认从 800 收紧为 120，避免临时预览误拉长历史。 |
+| `index_kline_tdx` | 通达信 | adapter-only -> source_request callable -> 采集器（index_daily 全历史翻页） | `code=000001.SH,period=day,count=20`；默认 `count=120`，`full_history=true` 翻页拉全历史 | 已覆盖 | 离线 gateway/API/SDK；adapter 默认 count 测试；full_history 翻页单测 | 是（`tdx.index_kline_tdx.snapshot`） | 默认从 800 收紧为 120，避免临时预览误拉长历史；wire 单请求页大小上限 800，`full_history` 翻页累积全历史。 |
 | `etf_realtime_snapshot_tdx` | 通达信 | adapter-only -> source_request callable | `code=510050.SH` | 已覆盖 | 离线 gateway/API/SDK | 否 | ETF 实时快照只做小代码列表查询。 |
 | `etf_kline_tdx` | 通达信 | adapter-only -> source_request callable | `code=510050.SH,period=day,count=20`；默认 `count=120` | 已覆盖 | 离线 gateway/API/SDK；adapter 默认 count 测试 | 否 | 默认从 800 收紧为 120，仍可显式传更大 count。 |
 | `concept_constituents_tdx` | 通达信 | adapter-only -> source_request callable | `concept_code=881386,count=5` | 已覆盖 | 离线 gateway/API/SDK | 否 | 概念成分股需要用户提供板块代码，本节不新增板块发现采集任务。 |
@@ -213,7 +213,6 @@ TDX 被显式禁用时，普通 TDX 接口仍可作为不可用目录项保留�
 | --- | --- | --- | --- | --- | --- |
 | `stock_kline_daily_tdx` | 通达信 | partial | 已有轻量 profile/spec，是 `daily` 当前核心源端；缺口是全市场 raw/staging -> core 转换、分区覆盖和真实源长期 smoke。 | 需要 TDX 插件和真实连接；不需要 token。 | 已有轻量 CollectorSpec；下一步补生产转换，不新增模板。 |
 | `stock_adj_factor_tdx` | 通达信 | partial | 已有源端接口和兼容 DownloaderProfile，是复权视图候选输入；不再作为采集器展示。 | 需要 TDX 插件和真实连接；不需要 token。 | 不建议默认采集；按需补重建策略。 |
-| `index_kline_tdx` | 通达信 | source_request callable | 第一批已补临时调用；指数行情可作为市场 regime/基准输入，未来可先补 DownloaderProfile。 | 需要 TDX 插件和真实连接；不需要 token。 | 可补 profile，不急着加 task template。 |
 | `etf_kline_tdx` | 通达信 | source_request callable | 第一批已补临时调用；ETF 价格序列适合做可选资产层样本。 | 需要 TDX 插件和真实连接；不需要 token。 | 可补 profile，不急着加 task template。 |
 | `stock_realtime_snapshot_tdx` | 通达信 | source_request callable | 第一批已补临时调用；如需持久化应作为显式 snapshot/recording，而非污染日线事实表。 | 需要 TDX 插件和真实连接；不需要 token。 | 可选 DownloaderProfile，不建议默认 CollectorSpec。 |
 | `concept_constituents_tdx` | 通达信 | source_request callable | 第一批已补临时调用；主题/概念成分适合 snapshot 留痕和 Data Browser 浏览。 | 需要 TDX 插件和真实连接；不需要 token。 | 可补 DownloaderProfile；模板优先级低。 |

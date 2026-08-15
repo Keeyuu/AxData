@@ -313,7 +313,7 @@ def test_plugin_check_external_tdx_provider_does_not_load_tdx_runtime() -> None:
         text=True,
     )
 
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=10 collectors=0" in result.stdout
+    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in result.stdout
     assert "exit=0" in result.stdout
     assert "axdata_core.builtin_providers" not in result.stdout
     assert "axdata_source_tdx.catalog" in result.stdout
@@ -365,7 +365,7 @@ def test_plugin_build_external_tdx_provider_does_not_load_tdx_runtime(tmp_path) 
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["provider"]["provider_id"] == TDX_PROVIDER_ID
     assert len(payload["interfaces"]) == 90
-    assert len(payload["downloaders"]) == 10
+    assert len(payload["downloaders"]) == 12
     assert payload["collectors"] == []
     assert "axdata_core.builtin_providers" not in result.stdout
     assert "axdata_source_tdx.catalog" in result.stdout

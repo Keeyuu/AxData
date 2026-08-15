@@ -63,6 +63,10 @@ INDEX_KLINE_PERIODS = {
 
 TDX_KLINE_MAX_COUNT = 65535
 
+# TDX 服务器单次 K 线请求的实测上限：count>800 会触发协议错误
+# （truncated kline time field）或返回 0 行，因此 wire 层单请求页大小必须封顶。
+TDX_KLINE_WIRE_PAGE_LIMIT = 800
+
 
 def bool_param(value: Any, *, name: str = "ascending") -> bool:
     if isinstance(value, bool):

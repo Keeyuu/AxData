@@ -8866,6 +8866,152 @@ def test_tdx_adapter_requests_index_kline_with_index_kind_and_breadth_counts():
     assert adapter.last_meta["tdx_kline_kind"] == "index"
 
 
+def test_tdx_adapter_index_kline_full_history_accumulates_all_pages_without_tail():
+    class PagingIndexKlineClient(FakeTdxClient):
+        def get_kline(
+            self,
+            code,
+            *,
+            period="day",
+            start=0,
+            count=800,
+            adjust=None,
+            anchor_date=None,
+            kind="stock",
+        ):
+            self.kline_calls.append(
+                {
+                    "code": code,
+                    "period": period,
+                    "start": start,
+                    "count": count,
+                    "adjust": adjust,
+                    "anchor_date": anchor_date,
+                    "kind": kind,
+                }
+            )
+            bars = tuple(
+                SimpleNamespace(
+                    time=datetime(2026, 1, 1 + offset, 15, 0, tzinfo=timezone(timedelta(hours=8))),
+                    open=10.0,
+                    high=10.2,
+                    low=9.9,
+                    close=10.1,
+                    volume_lots=100.0,
+                    amount=101000.0,
+                    up_count=100 + offset,
+                    down_count=50 + offset,
+                )
+                for offset in range(start, min(start + count, 10))
+            )
+            return SimpleNamespace(
+                exchange=code[:2],
+                code=code[2:],
+                full_code=code,
+                period_raw=13,
+                period_param_raw=1,
+                period_name=period,
+                start=start,
+                request_count=count,
+                adjust_mode_raw=0,
+                adjust_mode=adjust or "none",
+                anchor_date_raw=0,
+                bars=bars,
+            )
+
+    client = PagingIndexKlineClient()
+    adapter = TdxRequestAdapter(client=client)
+
+    rows = adapter.request(
+        "index_kline_tdx",
+        {"code": "000001.SH", "period": "day", "count": 3, "full_history": True},
+    )
+
+    assert [call["start"] for call in client.kline_calls] == [0, 3, 6, 9]
+    assert len(rows) == 10
+    assert [row["trade_time"] for row in rows] == [
+        f"2026-01-{day:02d}T15:00:00+08:00" for day in range(1, 11)
+    ]
+    assert rows[0]["up_count"] == 100
+    assert adapter.last_meta["tdx_kline_kind"] == "index"
+    assert adapter.last_meta["tdx_page_count"] == 4
+
+
+def test_tdx_adapter_index_kline_wire_page_is_capped_and_default_tails_to_count():
+    class PagingIndexKlineClient(FakeTdxClient):
+        def get_kline(
+            self,
+            code,
+            *,
+            period="day",
+            start=0,
+            count=800,
+            adjust=None,
+            anchor_date=None,
+            kind="stock",
+        ):
+            self.kline_calls.append(
+                {
+                    "code": code,
+                    "period": period,
+                    "start": start,
+                    "count": count,
+                    "adjust": adjust,
+                    "anchor_date": anchor_date,
+                    "kind": kind,
+                }
+            )
+            bars = tuple(
+                SimpleNamespace(
+                    time=datetime(2026, 1, 1 + offset, 15, 0, tzinfo=timezone(timedelta(hours=8))),
+                    open=10.0,
+                    high=10.2,
+                    low=9.9,
+                    close=10.1,
+                    volume_lots=100.0,
+                    amount=101000.0,
+                )
+                for offset in range(start, min(start + count, 10))
+            )
+            return SimpleNamespace(
+                exchange=code[:2],
+                code=code[2:],
+                full_code=code,
+                period_raw=13,
+                period_param_raw=1,
+                period_name=period,
+                start=start,
+                request_count=count,
+                adjust_mode_raw=0,
+                adjust_mode=adjust or "none",
+                anchor_date_raw=0,
+                bars=bars,
+            )
+
+    # count=2000 默认 full_history=false：wire 单请求页大小被压到 800，不再单请求 2000 条。
+    client = PagingIndexKlineClient()
+    adapter = TdxRequestAdapter(client=client)
+
+    rows = adapter.request("index_kline_tdx", {"code": "000001.SH", "period": "day", "count": 2000})
+
+    assert [call["count"] for call in client.kline_calls] == [800]
+    assert len(rows) == 10
+    assert adapter.last_meta["tdx_page_size"] == 800
+
+    # count=2 默认 full_history=false：行为与改动前一致，只保留最近 count 条。
+    client = PagingIndexKlineClient()
+    adapter = TdxRequestAdapter(client=client)
+
+    rows = adapter.request("index_kline_tdx", {"code": "000001.SH", "period": "day", "count": 2})
+
+    assert all(call["count"] == 2 for call in client.kline_calls)
+    assert len(rows) == 2
+    assert [row["trade_time"] for row in rows] == [
+        "2026-01-09T15:00:00+08:00",
+        "2026-01-10T15:00:00+08:00",
+    ]
+
+
 def test_tdx_adapter_requests_full_kline_history_with_internal_paging():
     class PagingKlineClient(FakeTdxClient):
         def get_kline(

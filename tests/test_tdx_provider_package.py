@@ -196,7 +196,7 @@ def test_tdx_provider_catalog_projection_does_not_load_downloader_runtime() -> N
     result = _core_without_site_subprocess(code)
 
     assert "interfaces=90" in result.stdout
-    assert "profiles=10" in result.stdout
+    assert "profiles=12" in result.stdout
     assert "collectors=0" in result.stdout
     assert "axdata_core.sources.tdx.catalog" not in result.stdout
     assert "axdata_core.tdx_f10_catalog" not in result.stdout
@@ -6139,7 +6139,7 @@ def test_tdx_provider_package_manifest_matches_provider(monkeypatch, tmp_path, c
         )
         == 0
     )
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=10 collectors=0" in capsys.readouterr().out
+    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in capsys.readouterr().out
     assert "axdata_source_tdx.provider" in sys.modules
     assert "axdata_source_tdx.adapter" not in sys.modules
 
@@ -6496,6 +6496,52 @@ def test_tdx_provider_manifest_matches_runtime_profile_and_collector_declaration
         "volume": "vol",
     }
 
+
+def test_tdx_collector_specs_include_index_kline_and_index_codes() -> None:
+    sys.path.insert(0, str(TDX_PACKAGE_ROOT / "src"))
+
+    from axdata_source_tdx.collectors import TDX_COLLECTOR_INTERFACES, tdx_collector_specs
+
+    assert {"index_kline_tdx", "index_codes_tdx"} <= set(TDX_COLLECTOR_INTERFACES)
+
+    specs = {spec.name: spec for spec in tdx_collector_specs()}
+
+    kline = specs["tdx.index_kline_tdx.snapshot"]
+    assert kline.collector_plugin_id == TDX_COLLECTOR_PLUGIN_ID
+    assert kline.runner_entry == TDX_COLLECTOR_RUNNER_ENTRY
+    assert kline.dataset_id == "tdx.index_daily"
+    assert kline.category == "daily"
+    assert kline.resource_group == "tdx.quote"
+    assert kline.default_params == {
+        "code": "sh000001",
+        "period": "day",
+        "full_history": True,
+    }
+    assert kline.output["layer"] == "core"
+    assert kline.output["default_output_path_parts"] == ["core", "table=index_daily"]
+    assert kline.output["primary_key"] == ["instrument_id", "trade_time"]
+    assert kline.output["default_dir_name"] == "tdx.index_daily"
+    assert kline.quality["required_columns"] == ["instrument_id", "trade_time", "period"]
+    assert kline.quality["datetime_field"] == "trade_time"
+    assert kline.required_datasets == ()
+    dataset = kline.output["datasets"][0]
+    assert dataset["dataset_id"] == "tdx.index_daily"
+    assert dataset["table"] == "index_daily"
+    assert dataset["layer"] == "core"
+    assert dataset["primary_key"] == ["instrument_id", "trade_time"]
+
+    codes = specs["tdx.index_codes_tdx.snapshot"]
+    assert codes.collector_plugin_id == TDX_COLLECTOR_PLUGIN_ID
+    assert codes.dataset_id == "tdx.index_catalog"
+    assert codes.category == "index_reference"
+    assert codes.resource_group == "tdx.quote"
+    assert codes.default_params == {"include_tdx_block_index": True}
+    assert codes.output["layer"] == "snapshot"
+    assert codes.output["default_output_path_parts"] == ["core", "table=index_catalog"]
+    assert codes.output["primary_key"] == ["instrument_id"]
+    assert codes.required_datasets == ()
+    assert codes.quality["required_columns"] == ["instrument_id"]
+
 @pytest.mark.packaging
 def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_wheel) -> None:
     wheel_path = built_wheel("tdx").wheel_path
@@ -6650,6 +6696,8 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_w
         "stock_adj_factor_tdx",
         "stock_limit_ladder_tdx",
         "stock_theme_strength_rank_tdx",
+        "index_kline_tdx",
+        "index_codes_tdx",
     }
     collectors = {collector.name: collector for collector in manifest.collectors}
     assert set(collectors) == TDX_LEGACY_COLLECTOR_NAMES

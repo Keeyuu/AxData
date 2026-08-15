@@ -21,6 +21,8 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_daily_price_limit_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
+    "index_kline_tdx",
+    "index_codes_tdx",
     "stock_adj_factor_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
