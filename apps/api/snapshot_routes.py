@@ -6,6 +6,8 @@ docs/plan/axdata-integration/05-snapshot-contract.md §6:
     GET /v1/snapshots?namespace=<namespace>
     GET /v1/snapshots/{snapshot_id}
     GET /v1/snapshots/{snapshot_id}/manifest
+    GET /v1/snapshots/{snapshot_id}/quality
+    GET /v1/snapshots/{snapshot_id}/artifact/{artifact_path}
 
 Snapshots are created by the Collector, not through this API (plan §6), so
 there are no write routes here.
@@ -14,18 +16,24 @@ Status codes:
 
 - 404: unknown snapshot id, or an existing directory that is not a completed
   snapshot (no ``_SUCCESS``, corrupted manifest, or path escaping the snapshot
-  root) — such entries are never visible, exactly like unknown ids;
-- 400: malformed namespace / snapshot_id path components;
+  root) — such entries are never visible, exactly like unknown ids. Artifact
+  routes also answer 404 when the resolved path leaves the snapshot root (a
+  symlink escape must not leak what lies outside) or no artifact file exists
+  at the path (including directories, which are not downloadable as a whole);
+- 400: malformed namespace / snapshot_id path components, and syntactically
+  invalid artifact paths (empty, URI scheme, absolute, ``..``/``.``/empty
+  components);
 - 503: axdata_core unavailable.
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .config import data_root
 from .serialization import error_payload, response_payload, to_jsonable
@@ -127,6 +135,71 @@ def get_snapshot_manifest_route(snapshot_id: str) -> JSONResponse:
         status_code=status.HTTP_200_OK,
         content=to_jsonable(response_payload(manifest, snapshot_id=snapshot_id)),
     )
+
+
+@router.get("/v1/snapshots/{snapshot_id}/quality")
+def get_snapshot_quality_route(snapshot_id: str) -> JSONResponse:
+    try:
+        from axdata_core import get_snapshot
+    except ImportError:
+        return _snapshot_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "CORE_UNAVAILABLE",
+            "axdata_core is not available. Install the core package before reading snapshots.",
+            snapshot_id=snapshot_id,
+        )
+    try:
+        info = get_snapshot(snapshot_id, data_root=data_root())
+    except ValueError as exc:
+        return _snapshot_error(
+            _snapshot_lookup_status(exc),
+            _snapshot_lookup_code(exc),
+            str(exc),
+            snapshot_id=snapshot_id,
+        )
+    quality_path = _snapshot_path(info) / "quality.json"
+    try:
+        quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return _snapshot_error(
+            status.HTTP_404_NOT_FOUND,
+            "SNAPSHOT_NOT_FOUND",
+            f"Cannot read snapshot quality {quality_path}: {exc}",
+            snapshot_id=snapshot_id,
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=to_jsonable(response_payload(quality, snapshot_id=snapshot_id)),
+    )
+
+
+@router.get("/v1/snapshots/{snapshot_id}/artifact/{artifact_path:path}")
+def get_snapshot_artifact_route(snapshot_id: str, artifact_path: str) -> FileResponse:
+    try:
+        from axdata_core import resolve_snapshot_artifact
+    except ImportError:
+        return _snapshot_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "CORE_UNAVAILABLE",
+            "axdata_core is not available. Install the core package before reading snapshots.",
+            snapshot_id=snapshot_id,
+        )
+    try:
+        artifact = resolve_snapshot_artifact(
+            snapshot_id, artifact_path, data_root=data_root()
+        )
+    except ValueError as exc:
+        return _snapshot_error(
+            _snapshot_lookup_status(exc),
+            _snapshot_lookup_code(exc),
+            str(exc),
+            snapshot_id=snapshot_id,
+        )
+    return FileResponse(artifact)
+
+
+def _snapshot_path(info: Any) -> Path:
+    return Path(str(info["path"]))
 
 
 def _snapshot_hidden(exc: ValueError) -> bool:

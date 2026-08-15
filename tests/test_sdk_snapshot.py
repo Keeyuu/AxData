@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app
 from tests.test_snapshots import (
     NAMESPACE,
+    _make_qlib_style_dir,
     _snapshot_kwargs,
 )
 
@@ -183,3 +184,82 @@ def test_sdk_snapshot_manifest_matches_disk_both_modes(tmp_path, api_session) ->
     assert api.snapshot_manifest(info["snapshot_id"]) == local.snapshot_manifest(
         info["snapshot_id"]
     )
+
+
+def test_sdk_snapshot_quality_matches_disk_both_modes(tmp_path, api_session) -> None:
+    root = _data_root(tmp_path)
+    info = create_snapshot(**_snapshot_kwargs(root))
+    disk_quality = json.loads(
+        (root / "snapshots" / NAMESPACE / info["snapshot_id"] / "quality.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    local = _local_client(root)
+    api = _api_client(api_session)
+
+    local_quality = local.snapshot_quality(info["snapshot_id"])
+    api_quality = api.snapshot_quality(info["snapshot_id"])
+
+    assert local_quality == disk_quality
+    assert api_quality == disk_quality
+    assert api_quality == local_quality
+
+
+def test_sdk_snapshot_artifact_bytes_match_disk_both_modes(tmp_path, api_session) -> None:
+    root = _data_root(tmp_path)
+    qlib_dir = _make_qlib_style_dir(tmp_path / "export")
+    info = create_snapshot(
+        **_snapshot_kwargs(root, extra_artifacts=[qlib_dir], qlib_provider_uri="qlib")
+    )
+    snapshot_dir = root / "snapshots" / NAMESPACE / info["snapshot_id"]
+    local = _local_client(root)
+    api = _api_client(api_session)
+
+    for uri in (
+        "tables/market/part-0.parquet",
+        "quality.json",
+        "_SUCCESS",
+        "qlib/calendars/day.txt",
+        "qlib/features/600000/open.day.bin",
+    ):
+        expected = (snapshot_dir.joinpath(*uri.split("/"))).read_bytes()
+        assert local.snapshot_artifact(info["snapshot_id"], uri) == expected, uri
+        assert api.snapshot_artifact(info["snapshot_id"], uri) == expected, uri
+
+
+def test_sdk_snapshot_artifact_same_error_categories_both_modes(
+    tmp_path, api_session
+) -> None:
+    root = _data_root(tmp_path)
+    info = create_snapshot(**_snapshot_kwargs(root))
+    local = _local_client(root)
+    api = _api_client(api_session)
+
+    for client in (local, api):
+        with pytest.raises(ax.AxDataError) as exc_info:
+            client.snapshot_artifact(info["snapshot_id"], "../escape.txt")
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.code == "SNAPSHOT_INVALID_REQUEST"
+
+        with pytest.raises(ax.AxDataError) as exc_info:
+            client.snapshot_artifact(info["snapshot_id"], "missing.bin")
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.code == "SNAPSHOT_NOT_FOUND"
+
+        with pytest.raises(ax.AxDataError) as exc_info:
+            client.snapshot_quality("snp_nosuch_0001")
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.code == "SNAPSHOT_NOT_FOUND"
+
+        with pytest.raises(ax.AxDataError) as exc_info:
+            client.snapshot_artifact("snp_nosuch_0001", "quality.json")
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.code == "SNAPSHOT_NOT_FOUND"
+
+
+def test_sdk_snapshot_quality_and_artifact_require_arguments(tmp_path) -> None:
+    local = _local_client(_data_root(tmp_path))
+    with pytest.raises(ValueError, match="snapshot_id is required"):
+        local.snapshot_quality("")
+    with pytest.raises(ValueError, match="artifact_path is required"):
+        local.snapshot_artifact("snp_x", "  ")

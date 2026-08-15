@@ -40,7 +40,15 @@ Hashing (plan §4)
   hash: quality is a caller-owned record and auxiliary artifacts are not part
   of the bundle identity (plan §7 only requires warnings to be surfaced in
   ``limitations``). ``extra_artifacts`` are still copied into the snapshot
-  root and move with it.
+  root and move with it. Artifacts may be files or whole directories (copied
+  recursively, nested structure preserved); in both cases neither the
+  artifact's presence nor its contents ever enter the content hash, so the
+  same tables always produce the same snapshot id.
+
+The top-level ``source_runs`` is the caller's explicit value when a non-empty
+one is given, and otherwise the first-seen-order, deduplicated union of
+``source_datasets[].source_runs``. Being derived from ``source_datasets``
+(which are hashed), it never enters the content hash itself.
 
 ``dataset_version`` is derived from ``calendar_version``: the create API has
 no separate dataset-version argument (plan §5), and the dataset version of a
@@ -131,6 +139,7 @@ def create_snapshot(
     data_root: str | Path,
     quality: Mapping[str, Any],
     limitations: Sequence[str] = (),
+    source_runs: Sequence[str] | None = None,
     extra_artifacts: Sequence[Path] = (),
     qlib_provider_uri: str | None = None,
 ) -> dict[str, Any]:
@@ -140,6 +149,17 @@ def create_snapshot(
     <namespace>/``, computes hashes and the manifest there, then atomically
     renames the directory to its final name ``snp_<content_hash[:24]>`` (with
     ``_SUCCESS`` already inside, see the module docstring).
+
+    ``extra_artifacts`` may contain files and directories (e.g. an exported
+    Qlib provider directory, plan 06 §5); each is published under its own
+    ``name`` at the snapshot root. Symbolic links are rejected — a symlinked
+    artifact (or one nested inside an artifact directory) could smuggle
+    content from outside the caller's tree into the immutable bundle.
+
+    ``source_runs`` sets the manifest's top-level run lineage explicitly. When
+    it is omitted or empty, the value is aggregated from
+    ``source_datasets[].source_runs`` (first-seen order, duplicates removed).
+    It is derived metadata and never enters the content hash.
 
     ``qlib_provider_uri`` is the path of an exported Qlib provider directory
     **relative to the snapshot root** (plan 05 §2 / 06 §5), recorded verbatim
@@ -164,6 +184,7 @@ def create_snapshot(
     _require_table_inputs(tables)
     source_entries = _normalize_source_datasets(source_datasets)
     limitations = [str(item) for item in limitations]
+    runs = _normalize_source_runs(source_runs, source_entries)
     quality = _require_mapping(quality, "quality")
     artifacts = _normalize_extra_artifacts(extra_artifacts)
     qlib_uri = _normalize_qlib_provider_uri(qlib_provider_uri)
@@ -195,7 +216,7 @@ def create_snapshot(
             "created_at": _utc_now(),
             "tables": table_refs,
             "source_datasets": source_entries,
-            "source_runs": [],
+            "source_runs": runs,
             "qlib_provider_uri": qlib_uri,
             "quality_uri": _QUALITY_FILE_NAME,
             "limitations": limitations,
@@ -316,6 +337,44 @@ def resolve_snapshot_manifest(
     return snapshot_dir / _MANIFEST_FILE_NAME
 
 
+def resolve_snapshot_artifact(
+    snapshot_id: str,
+    artifact_path: str,
+    *,
+    data_root: str | Path | None = None,
+) -> Path:
+    """Resolve one existing file inside a completed snapshot by relative path.
+
+    Locates and completion-checks the snapshot like :func:`get_snapshot`, then
+    resolves ``artifact_path`` (snapshot-root-relative, ``/``-separated, e.g.
+    ``tables/market/part-0.parquet``, ``quality.json``, ``_SUCCESS`` or a file
+    inside a directory artifact such as ``qlib/calendars/day.txt``). Malformed
+    paths — empty, URI scheme, absolute, ``..``/``.``/empty components —
+    raise :class:`SnapshotError`; a resolved target that leaves the snapshot
+    root (symlink escape) raises :class:`SnapshotError`; a path that does not
+    exist or is a directory raises :class:`SnapshotNotFoundError`.
+
+    This is the single read-side resolver shared by the API artifact route and
+    the SDK, so both surface identical error categories.
+    """
+    snapshot_id = _validate_component(snapshot_id, "snapshot_id")
+    relative = _validate_relative_path(artifact_path, "artifact_path")
+    root = _resolve_data_root(data_root)
+    snapshots_root = root / "snapshots"
+    if not snapshots_root.is_dir():
+        raise SnapshotNotFoundError(f"No snapshots exist under {root}.")
+    _, snapshot_dir = _locate_snapshot(snapshot_id, snapshots_root)
+    _read_completed_manifest(snapshot_dir)
+    candidate = snapshot_dir.joinpath(*relative.split("/"))
+    if not _inside_root(candidate, snapshot_dir):
+        raise SnapshotError(f"Artifact path escapes the snapshot root: {artifact_path!r}")
+    if not candidate.is_file():
+        raise SnapshotNotFoundError(
+            f"Snapshot {snapshot_id!r} has no artifact file at {relative!r}."
+        )
+    return candidate
+
+
 # ---------------------------------------------------------------------------
 # Writing
 # ---------------------------------------------------------------------------
@@ -419,7 +478,10 @@ def _asset_ref(file_path: Path, snapshot_root: Path) -> dict[str, Any]:
 
 def _copy_artifact(source: Path, target: Path) -> None:
     try:
-        shutil.copy2(source, target)
+        if source.is_dir():
+            shutil.copytree(source, target)
+        else:
+            shutil.copy2(source, target)
     except OSError as exc:
         raise SnapshotError(f"Failed to copy extra artifact {source}: {exc}") from exc
 
@@ -615,6 +677,15 @@ def _normalize_source_datasets(
 def _normalize_extra_artifacts(
     extra_artifacts: Sequence[Path],
 ) -> list[tuple[str, Path]]:
+    """Validate extra artifacts: existing files or directories, never links.
+
+    Directory artifacts (e.g. an exported Qlib provider) are published under
+    their directory name with the nested structure copied verbatim. Symbolic
+    links are refused everywhere — at the artifact root and inside artifact
+    directories — so a link can never pull outside content into the immutable
+    bundle or place a dangling pointer inside it. Reserved and duplicate root
+    names are rejected for directories exactly like for files.
+    """
     if not isinstance(extra_artifacts, Sequence) or isinstance(
         extra_artifacts, (str, bytes, bytearray)
     ):
@@ -622,8 +693,12 @@ def _normalize_extra_artifacts(
     entries: list[tuple[str, Path]] = []
     for artifact in extra_artifacts:
         path = Path(artifact)
-        if not path.is_file():
-            raise SnapshotError(f"Extra artifact is not an existing file: {path}")
+        if not path.exists():
+            raise SnapshotError(f"Extra artifact is not an existing file or directory: {path}")
+        if path.is_symlink():
+            raise SnapshotError(f"Refusing extra artifact symbolic link: {path}")
+        if path.is_dir():
+            _reject_nested_symlinks(path)
         name = path.name
         if not name or name in _RESERVED_ROOT_NAMES:
             raise SnapshotError(f"Extra artifact name is reserved: {name!r}")
@@ -631,6 +706,48 @@ def _normalize_extra_artifacts(
             raise SnapshotError(f"Duplicate extra artifact name: {name!r}")
         entries.append((name, path))
     return entries
+
+
+def _reject_nested_symlinks(root: Path) -> None:
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in (*dirnames, *filenames):
+            if os.path.islink(os.path.join(dirpath, name)):
+                raise SnapshotError(
+                    f"Refusing symbolic link inside directory artifact "
+                    f"{root}: {os.path.join(dirpath, name)}"
+                )
+
+
+def _normalize_source_runs(
+    source_runs: Sequence[str] | None,
+    source_datasets: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    """Resolve the manifest's top-level ``source_runs`` (05 §3).
+
+    An explicit non-empty value wins verbatim (the caller owns the lineage).
+    Otherwise the run ids are aggregated from ``source_datasets[].source_runs``
+    in first-seen order with duplicates removed — the same
+    ``dict.fromkeys`` union the dataset catalog uses for merged descriptors.
+    """
+    provided: list[str] = []
+    if source_runs is not None:
+        if not isinstance(source_runs, Sequence) or isinstance(
+            source_runs, (str, bytes, bytearray)
+        ):
+            raise SnapshotError("source_runs must be a sequence of run ids.")
+        for run in source_runs:
+            if not isinstance(run, str) or not run.strip():
+                raise SnapshotError("source_runs entries must be non-empty strings.")
+            provided.append(run)
+    if provided:
+        return provided
+    collected: list[str] = []
+    for entry in source_datasets:
+        runs = entry.get("source_runs", ())
+        if not isinstance(runs, Sequence) or isinstance(runs, (str, bytes, bytearray)):
+            continue
+        collected.extend(str(run) for run in runs if str(run).strip())
+    return list(dict.fromkeys(collected))
 
 
 def _normalize_qlib_provider_uri(value: str | None) -> str | None:
@@ -656,6 +773,32 @@ def _normalize_qlib_provider_uri(value: str | None) -> str | None:
             f"Refusing qlib_provider_uri outside the snapshot root: {text!r}"
         )
     return text
+
+
+def _validate_relative_path(value: Any, label: str) -> str:
+    """A snapshot-root-relative multi-component path in canonical ``/`` form.
+
+    Refuses everything that could address outside the snapshot: empty values,
+    URI schemes, absolute paths (including Windows drives) and any ``..``,
+    ``.`` or empty component. The check is syntactic; the resolved containment
+    check in the caller remains the security boundary for symlinks.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise SnapshotError(f"Snapshot {label} must be a non-empty relative path.")
+    text = value.strip()
+    if _URI_SCHEME_PATTERN.match(text):
+        raise SnapshotError(f"Refusing {label} with URI scheme: {text!r}")
+    path = Path(text)
+    # Same Windows caveat as ``_normalize_qlib_provider_uri``: ``/abs`` has no
+    # drive on Windows, and ``C:/x`` is absolute only there — check both.
+    if path.is_absolute() or text.startswith(("/", "\\")):
+        raise SnapshotError(f"Refusing absolute {label}: {text!r}")
+    parts = text.replace("\\", "/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise SnapshotError(
+            f"Refusing {label} with '.', '..' or empty components: {text!r}"
+        )
+    return "/".join(parts)
 
 
 def _inside_root(path: Path, root: Path) -> bool:

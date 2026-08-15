@@ -123,6 +123,7 @@ _EXPORT_MODULES: dict[str, str] = {
     "create_snapshot": ".snapshots",
     "get_snapshot": ".snapshots",
     "list_snapshots": ".snapshots",
+    "resolve_snapshot_artifact": ".snapshots",
     "resolve_snapshot_manifest": ".snapshots",
     "DatasetQueryError": ".dataset_query",
     "query_dataset": ".dataset_query",

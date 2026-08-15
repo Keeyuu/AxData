@@ -4469,6 +4469,18 @@ pre code {
   margin-top: 12px;
 }
 
+.quality-detail-block {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.quality-detail-block > strong {
+  color: #4a5a6f;
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
 .quality-note {
   margin: 0;
   border: 1px solid #eadfd0;

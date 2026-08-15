@@ -297,6 +297,111 @@ class AxDataClient:
         self._raise_for_status(response)
         return self._extract_data_object(response.json())
 
+    def snapshot_quality(self, snapshot_id: str) -> dict[str, Any]:
+        """Return the quality.json content of one completed snapshot.
+
+        Local mode resolves the snapshot through ``axdata_core`` and reads
+        ``quality.json`` from disk; API mode calls
+        ``GET /v1/snapshots/{snapshot_id}/quality``. Both modes return the
+        parsed JSON exactly as written on disk.
+
+        Raises :class:`AxDataError` with status 404 when the snapshot does
+        not exist, is unfinished (no ``_SUCCESS``) or its quality record
+        cannot be read, and status 400 on malformed snapshot ids.
+        """
+
+        if not snapshot_id:
+            raise ValueError("snapshot_id is required")
+        if self.mode == "local":
+            try:
+                from axdata_core import resolve_snapshot_artifact
+            except ImportError as exc:
+                raise AxDataError(
+                    "AxData local snapshots require axdata_core. Install the workspace or "
+                    "use API mode with api_base.",
+                    code="CORE_UNAVAILABLE",
+                    status_code=503,
+                ) from exc
+            try:
+                quality_path = resolve_snapshot_artifact(
+                    snapshot_id, "quality.json", data_root=self.data_root
+                )
+            except Exception as exc:
+                raise self._translate_snapshot_error(exc) from exc
+            try:
+                return dict(json.loads(quality_path.read_text(encoding="utf-8")))
+            except (OSError, ValueError) as exc:
+                raise AxDataError(
+                    f"Cannot read snapshot quality {quality_path}: {exc}",
+                    code="SNAPSHOT_NOT_FOUND",
+                    status_code=404,
+                ) from exc
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        response = self._http_session.get(
+            f"{self.api_base}/v1/snapshots/{quote(str(snapshot_id), safe='')}/quality",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return self._extract_data_object(response.json())
+
+    def snapshot_artifact(self, snapshot_id: str, artifact_path: str) -> bytes:
+        """Return one artifact file of a completed snapshot as raw bytes.
+
+        ``artifact_path`` is snapshot-root-relative and ``/``-separated, e.g.
+        ``tables/market/part-0.parquet``, ``quality.json``, ``_SUCCESS`` or a
+        file inside a directory artifact such as ``qlib/calendars/day.txt``.
+        Local mode resolves the file through
+        ``axdata_core.resolve_snapshot_artifact``; API mode calls
+        ``GET /v1/snapshots/{snapshot_id}/artifact/{artifact_path}``. Both
+        modes validate the path with the same core rules, so the error
+        categories are identical: 400 for malformed paths (empty, absolute,
+        ``..``) and 404 for unknown snapshots, unfinished snapshots or
+        missing files.
+        """
+
+        if not snapshot_id:
+            raise ValueError("snapshot_id is required")
+        if not artifact_path or not str(artifact_path).strip():
+            raise ValueError("artifact_path is required")
+        relative = str(artifact_path).strip()
+        if self.mode == "local":
+            try:
+                from axdata_core import resolve_snapshot_artifact
+            except ImportError as exc:
+                raise AxDataError(
+                    "AxData local snapshots require axdata_core. Install the workspace or "
+                    "use API mode with api_base.",
+                    code="CORE_UNAVAILABLE",
+                    status_code=503,
+                ) from exc
+            try:
+                return resolve_snapshot_artifact(
+                    snapshot_id, relative, data_root=self.data_root
+                ).read_bytes()
+            except Exception as exc:
+                raise self._translate_snapshot_error(exc) from exc
+        if not self.api_base:
+            raise AxDataError("api_base is required for API mode")
+        # ``quote`` never encodes "." (RFC unreserved) and HTTP clients strip
+        # dot segments from URLs, so dots are encoded manually — the server
+        # must see the path verbatim to validate it with the core rules.
+        quoted_path = "/".join(
+            quote(segment, safe="").replace(".", "%2e") for segment in relative.split("/")
+        )
+        url = (
+            f"{self.api_base}/v1/snapshots/{quote(str(snapshot_id), safe='')}"
+            f"/artifact/{quoted_path}"
+        )
+        response = self._http_session.get(
+            url,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        self._raise_for_status(response)
+        return response.content
+
     def query_dataset(
         self,
         dataset_id: str,

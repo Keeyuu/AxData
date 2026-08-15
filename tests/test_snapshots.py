@@ -29,6 +29,7 @@ from axdata_core import (
     create_snapshot,
     get_snapshot,
     list_snapshots,
+    resolve_snapshot_artifact,
     resolve_snapshot_manifest,
 )
 from axdata_core.snapshots import (
@@ -387,7 +388,8 @@ def test_manifest_v2_fields(tmp_path):
     assert manifest["dataset_version"] == CALENDAR_VERSION
     assert manifest["calendar_version"] == CALENDAR_VERSION
     assert manifest["created_at"] == info["created_at"]
-    assert manifest["source_runs"] == []
+    # aggregated from SOURCE_DATASETS[].source_runs (no explicit value given)
+    assert manifest["source_runs"] == ["run_demo_20260131_abcdef12"]
     assert manifest["qlib_provider_uri"] is None
     assert manifest["quality_uri"] == "quality.json"
     assert manifest["limitations"] == list(LIMITATIONS)
@@ -456,3 +458,153 @@ def test_quality_and_extra_artifacts_written(tmp_path):
     missing = tmp_path / "missing.txt"
     with pytest.raises(SnapshotError, match="not an existing file"):
         create_snapshot(**_snapshot_kwargs(tmp_path, extra_artifacts=[missing]))
+
+
+# ---------------------------------------------------------------------------
+# Directory extra artifacts (runner call shape, 05 §2 / 06 §5)
+# ---------------------------------------------------------------------------
+
+
+def _make_qlib_style_dir(parent: Path) -> Path:
+    """A Qlib-provider-shaped directory tree: calendars/instruments/features."""
+    qlib = parent / "qlib"
+    (qlib / "calendars").mkdir(parents=True)
+    (qlib / "instruments").mkdir()
+    (qlib / "features" / "600000").mkdir(parents=True)
+    (qlib / "calendars" / "day.txt").write_text("2026-01-02\n2026-01-03\n", encoding="utf-8")
+    (qlib / "instruments" / "all.txt").write_text("600000\t600001\n", encoding="utf-8")
+    (qlib / "features" / "600000" / "open.day.bin").write_bytes(b"\x00\x01qlib-bin")
+    return qlib
+
+
+def test_directory_extra_artifact_published_intact(tmp_path):
+    """The runner's real call shape: a nested qlib directory via extra_artifacts."""
+    qlib_dir = _make_qlib_style_dir(tmp_path / "export")
+    kwargs = _snapshot_kwargs(
+        tmp_path, extra_artifacts=[qlib_dir], qlib_provider_uri="qlib"
+    )
+    info = create_snapshot(**kwargs)
+
+    snapshot_dir = Path(info["path"])
+    published = snapshot_dir / "qlib"
+    assert (published / "calendars" / "day.txt").read_text(encoding="utf-8") == (
+        "2026-01-02\n2026-01-03\n"
+    )
+    assert (published / "instruments" / "all.txt").read_text(encoding="utf-8") == (
+        "600000\t600001\n"
+    )
+    assert (
+        (published / "features" / "600000" / "open.day.bin").read_bytes() == b"\x00\x01qlib-bin"
+    )
+    assert _manifest(snapshot_dir)["qlib_provider_uri"] == "qlib"
+
+    # Idempotency is unchanged: the same inputs return the existing snapshot.
+    assert create_snapshot(**kwargs) == info
+
+
+def test_directory_extra_artifact_never_enters_content_hash(tmp_path):
+    """File artifacts never entered the hash; directory artifacts must not either."""
+    qlib_dir = _make_qlib_style_dir(tmp_path / "export")
+    with_artifact = create_snapshot(
+        **_snapshot_kwargs(tmp_path / "root_a", extra_artifacts=[qlib_dir])
+    )
+    without_artifact = create_snapshot(**_snapshot_kwargs(tmp_path / "root_b"))
+    assert with_artifact["snapshot_id"] == without_artifact["snapshot_id"]
+    assert with_artifact["content_hash"] == without_artifact["content_hash"]
+
+
+def test_directory_artifact_reserved_and_duplicate_names_rejected(tmp_path):
+    reserved = tmp_path / "tables"
+    reserved.mkdir()
+    (reserved / "f.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(SnapshotError, match="reserved"):
+        create_snapshot(**_snapshot_kwargs(tmp_path / "r1", extra_artifacts=[reserved]))
+
+    first = _make_qlib_style_dir(tmp_path / "a")
+    second = _make_qlib_style_dir(tmp_path / "b")
+    with pytest.raises(SnapshotError, match="Duplicate"):
+        create_snapshot(
+            **_snapshot_kwargs(tmp_path / "r2", extra_artifacts=[first, second])
+        )
+
+
+def test_extra_artifact_symlinks_rejected(tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+
+    nested_root = _make_qlib_style_dir(tmp_path / "nested")
+    nested_link = nested_root / "calendars" / "escape.txt"
+    top_link = tmp_path / "linked_qlib"
+    try:
+        nested_link.symlink_to(outside)
+        top_link.symlink_to(nested_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation is not permitted on this host")
+    with pytest.raises(SnapshotError, match="symbolic link"):
+        create_snapshot(**_snapshot_kwargs(tmp_path / "r1", extra_artifacts=[nested_root]))
+    with pytest.raises(SnapshotError, match="symbolic link"):
+        create_snapshot(**_snapshot_kwargs(tmp_path / "r2", extra_artifacts=[top_link]))
+
+
+# ---------------------------------------------------------------------------
+# Top-level source_runs aggregation (05 §3)
+# ---------------------------------------------------------------------------
+
+
+def test_source_runs_aggregated_from_datasets_deduped(tmp_path):
+    sources = [
+        {"dataset_id": "demo.a", "source_runs": ["run_1", "run_2"]},
+        {"dataset_id": "demo.b", "source_runs": ["run_2", "run_3"]},
+        {"dataset_id": "demo.c"},  # no runs key at all
+    ]
+    info = create_snapshot(**_snapshot_kwargs(tmp_path, source_datasets=sources))
+    assert info["source_runs"] == ["run_1", "run_2", "run_3"]
+    assert _manifest(info["path"])["source_runs"] == ["run_1", "run_2", "run_3"]
+
+
+def test_source_runs_explicit_value_wins_verbatim(tmp_path):
+    sources = [{"dataset_id": "demo.a", "source_runs": ["run_1"]}]
+    explicit = create_snapshot(
+        **_snapshot_kwargs(
+            tmp_path, source_datasets=sources, source_runs=["run_x", "run_x"]
+        )
+    )
+    # explicit values are the caller's lineage and are kept verbatim
+    assert explicit["source_runs"] == ["run_x", "run_x"]
+
+    # an explicit empty value is "not provided": aggregation fills it in
+    empty = create_snapshot(
+        **_snapshot_kwargs(tmp_path / "empty", source_datasets=sources, source_runs=[])
+    )
+    assert empty["source_runs"] == ["run_1"]
+
+    with pytest.raises(SnapshotError):
+        create_snapshot(**_snapshot_kwargs(tmp_path / "bad", source_runs=["ok", ""]))
+
+
+# ---------------------------------------------------------------------------
+# Artifact resolution (shared read path of the API route and the SDK)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_snapshot_artifact_accepts_files_rejects_bad_paths(tmp_path):
+    info = create_snapshot(**_snapshot_kwargs(tmp_path))
+    snapshot_id = info["snapshot_id"]
+    parquet = resolve_snapshot_artifact(
+        snapshot_id, "tables/market/part-0.parquet", data_root=tmp_path
+    )
+    assert parquet.read_bytes() == (
+        Path(info["path"]) / "tables" / "market" / "part-0.parquet"
+    ).read_bytes()
+    for artifact in ("quality.json", "_SUCCESS", "manifest.json"):
+        assert resolve_snapshot_artifact(snapshot_id, artifact, data_root=tmp_path).is_file()
+
+    for bad in ("../x", "a/../../b", "/abs", "C:/abs", "a//b", "a/./b", "", "  ", "file:///x"):
+        with pytest.raises(SnapshotError):
+            resolve_snapshot_artifact(snapshot_id, bad, data_root=tmp_path)
+    with pytest.raises(SnapshotNotFoundError):
+        resolve_snapshot_artifact(snapshot_id, "missing.bin", data_root=tmp_path)
+    with pytest.raises(SnapshotNotFoundError):  # directories are not downloadable files
+        resolve_snapshot_artifact(snapshot_id, "tables", data_root=tmp_path)
+    with pytest.raises(SnapshotNotFoundError):
+        resolve_snapshot_artifact("snp_nosuch_0001", "quality.json", data_root=tmp_path)

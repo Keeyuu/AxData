@@ -17,10 +17,18 @@ import {
 import {
   SnapshotApiError,
   getSnapshot,
+  getSnapshotQuality,
   listSnapshots,
+  qualityCheckRows,
+  qualityLabels,
+  qualityQlibStatus,
+  qualityQlibWarnings,
+  qualitySources,
+  qualityTableRows,
   snapshotDateRange,
   snapshotSourceRunCount,
   snapshotUri,
+  type SnapshotQuality,
   type SnapshotSourceDatasetRef,
   type SnapshotSummary
 } from "../api";
@@ -211,6 +219,7 @@ export function SnapshotsPage({
             <div className="dataset-detail-panel">
               {activeSnapshot ? (
                 <SnapshotDetail
+                  apiBase={apiBase}
                   detailError={detailError}
                   onOpenDataBrowser={onOpenDataBrowser}
                   snapshot={activeSnapshot}
@@ -231,15 +240,40 @@ export function SnapshotsPage({
 }
 
 function SnapshotDetail({
+  apiBase,
   detailError,
   onOpenDataBrowser,
   snapshot
 }: {
+  apiBase: string;
   detailError: SnapshotApiError | null;
   onOpenDataBrowser?: () => void;
   snapshot: SnapshotSummary;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [quality, setQuality] = useState<SnapshotQuality | null>(null);
+  const [qualityState, setQualityState] = useState<"loading" | "ready" | "unavailable">("loading");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setQuality(null);
+    setQualityState("loading");
+    getSnapshotQuality(apiBase, snapshot.snapshot_id, controller.signal)
+      .then((payload) => {
+        if (!controller.signal.aborted) {
+          setQuality(payload);
+          setQualityState("ready");
+        }
+      })
+      .catch(() => {
+        // Old snapshots without quality.json and older backends answer 404;
+        // degrade to the manifest limitations view instead of blanking out.
+        if (!controller.signal.aborted) {
+          setQualityState("unavailable");
+        }
+      });
+    return () => controller.abort();
+  }, [apiBase, snapshot.snapshot_id]);
 
   async function copySnapshotUri() {
     const uri = snapshotUri(snapshot.snapshot_id);
@@ -364,10 +398,22 @@ function SnapshotDetail({
             <span>manifest 未声明限制项。</span>
           </div>
         )}
-        <div className="path-list">
-          <code>quality 文件：{snapshot.quality_uri || "quality.json"}</code>
-          <code className="missing">quality.json 内容不通过 Web API 提供；其 warning 已按契约进入 limitations</code>
-        </div>
+        {qualityState === "loading" ? (
+          <div className="data-browser-message">
+            <Loader2 size={17} />
+            <span>正在读取 quality.json 详情</span>
+          </div>
+        ) : qualityState === "unavailable" ? (
+          <div className="path-list">
+            <code>quality 文件：{snapshot.quality_uri || "quality.json"}</code>
+            <code className="missing">
+              quality 详情不可用（旧快照没有 quality.json，或后端未提供该端点）；以上 limitations
+              已按契约覆盖质量提醒，快照仍可正常使用。
+            </code>
+          </div>
+        ) : quality ? (
+          <QualityDetail quality={quality} />
+        ) : null}
       </section>
 
       <section className="doc-section">
@@ -387,6 +433,174 @@ function SnapshotDetail({
           </div>
         )}
       </section>
+    </>
+  );
+}
+
+function QualityDetail({ quality }: { quality: SnapshotQuality }) {
+  const checks = qualityCheckRows(quality);
+  const tables = qualityTableRows(quality);
+  const labels = qualityLabels(quality);
+  const sources = qualitySources(quality);
+  const qlibStatus = qualityQlibStatus(quality);
+  const qlibWarnings = qualityQlibWarnings(quality);
+  const qlib = quality.qlib && typeof quality.qlib === "object" && !Array.isArray(quality.qlib)
+    ? (quality.qlib as Record<string, unknown>)
+    : null;
+
+  const gateOk = quality.ok === true;
+  const gateLabel = gateOk ? "质量门禁通过" : quality.ok === false ? "质量门禁失败" : "质量门禁状态未知";
+  const qlibClass = qlibStatus === "passed" ? "ok" : qlibStatus === "warning" ? "warn" : "installed";
+
+  return (
+    <>
+      <div className="path-list">
+        <span className={`provider-status-badge ${gateOk ? "ok" : quality.ok === false ? "error" : "installed"}`}>
+          {gateLabel}
+        </span>
+        <span className="snapshot-uri-note">
+          {typeof quality.calendar_version === "string" && quality.calendar_version
+            ? `日历版本 ${quality.calendar_version} · `
+            : ""}
+          {typeof quality.membership_to_labels_coverage === "string" ? quality.membership_to_labels_coverage : ""}
+        </span>
+      </div>
+
+      <div className="quality-detail-block">
+        <strong>检查项（{checks.length}）</strong>
+        {checks.length > 0 ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>检查项</th>
+                  <th>状态</th>
+                  <th>消息</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checks.map((check, index) => (
+                  <tr key={`${check.check_id}-${index}`}>
+                    <td><code>{check.check_id}</code></td>
+                    <td>
+                      <span className={`provider-status-badge ${checkLevelClass(check.level)}`}>
+                        {checkLevelLabel(check.level)}
+                      </span>
+                    </td>
+                    <td>{check.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="data-browser-empty">
+            <strong>没有检查项</strong>
+            <span>quality.json 未记录 checks。</span>
+          </div>
+        )}
+      </div>
+
+      <div className="quality-detail-block">
+        <strong>五表统计</strong>
+        {tables.length > 0 ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>表</th>
+                  <th>行数</th>
+                  <th>缺失率</th>
+                  <th>日期范围</th>
+                  <th>实体数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tables.map((table) => (
+                  <tr key={table.name}>
+                    <td><code>{table.name}</code></td>
+                    <td>{formatNumber(table.row_count)}</td>
+                    <td>{formatPercent(table.missing_ratio)}</td>
+                    <td>{tableRange(table.date_min, table.date_max)}</td>
+                    <td>{formatNumber(table.entity_count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="data-browser-empty">
+            <strong>没有表统计</strong>
+            <span>quality.json 未记录 tables。</span>
+          </div>
+        )}
+      </div>
+
+      <div className="quality-detail-block">
+        <strong>标签统计</strong>
+        <DataTable
+          columns={["项目", "数值"]}
+          rows={[
+            ["总标签", formatNumber(labels.total)],
+            ["已解析（resolved）", formatNumber(labels.resolved)],
+            ["待处理（pending）", formatNumber(labels.pending)],
+            ["不可交易（untradable）", formatNumber(labels.untradable)]
+          ]}
+        />
+      </div>
+
+      <div className="quality-detail-block">
+        <strong>Qlib 导出验证</strong>
+        {qlib ? (
+          <>
+            <div className="path-list">
+              <span className={`provider-status-badge ${qlibClass}`}>
+                {qlibStatus === "passed" ? "验证通过" : qlibStatus === "warning" ? "有警告" : "未包含"}
+              </span>
+              {typeof qlib.provider_uri === "string" ? <code>相对路径：{qlib.provider_uri}</code> : null}
+              {typeof qlib.instrument_count === "number"
+                ? <code>{formatNumber(qlib.instrument_count)} 个标的</code>
+                : null}
+              {typeof qlib.start_date === "string" && typeof qlib.end_date === "string"
+                ? <code>{qlib.start_date} - {qlib.end_date}</code>
+                : null}
+              {typeof qlib.content_hash === "string"
+                ? <code title={qlib.content_hash}>content hash：{qlib.content_hash.slice(0, 12)}</code>
+                : null}
+            </div>
+            {qlibWarnings.length > 0 ? (
+              <div className="quality-note-list">
+                {qlibWarnings.map((item, index) => (
+                  <p className="quality-note" key={`${item}-${index}`}>{item}</p>
+                ))}
+              </div>
+            ) : qlibStatus === "passed" ? (
+              <div className="data-browser-message">
+                <CheckCircle2 size={15} />
+                <span>validation 无警告</span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="data-browser-empty">
+            <strong>未包含 Qlib provider</strong>
+            <span>该快照创建时未导出 Qlib 目录（include_qlib=false）。</span>
+          </div>
+        )}
+      </div>
+
+      {sources.length > 0 ? (
+        <div className="quality-detail-block">
+          <strong>来源数据集行数</strong>
+          <div className="path-list">
+            {sources.map((entry) => (
+              <code key={entry.dataset_id}>
+                {entry.dataset_id}：{entry.row_count === null ? "未知行数" : `${formatNumber(entry.row_count)} 行`} · {entry.run_count} 个 run
+              </code>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -523,6 +737,43 @@ function qualityBadgeClass(status: string) {
 
 function formatNumber(value: number | null | undefined) {
   return value === null || value === undefined ? "" : value.toLocaleString("zh-CN");
+}
+
+function formatPercent(value: number | null | undefined) {
+  return value === null || value === undefined ? "" : `${(value * 100).toFixed(2)}%`;
+}
+
+function tableRange(min: string | null, max: string | null) {
+  if (min && max) {
+    return `${min} - ${max}`;
+  }
+  return min || max || "";
+}
+
+function checkLevelLabel(level: string) {
+  if (level === "pass") {
+    return "通过";
+  }
+  if (level === "warning") {
+    return "提醒";
+  }
+  if (level === "failure") {
+    return "失败";
+  }
+  return "未知";
+}
+
+function checkLevelClass(level: string) {
+  if (level === "pass") {
+    return "ok";
+  }
+  if (level === "warning") {
+    return "warn";
+  }
+  if (level === "failure") {
+    return "error";
+  }
+  return "installed";
 }
 
 function formatBytes(value: number) {

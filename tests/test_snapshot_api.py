@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from apps.api.main import app
 from tests.test_snapshots import (
     NAMESPACE,
+    _make_qlib_style_dir,
     _snapshot_kwargs,
 )
 
@@ -177,5 +178,110 @@ def test_snapshot_manifest_incomplete_returns_404(client, tmp_path) -> None:
 
     response = client.get("/v1/snapshots/snp_incomplete_0001/manifest")
 
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "SNAPSHOT_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/snapshots/{snapshot_id}/quality
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_quality_route_matches_disk(client, tmp_path) -> None:
+    info = create_snapshot(**_snapshot_kwargs(_data_root(tmp_path)))
+    disk_quality = json.loads(
+        (
+            tmp_path / DATA_ROOT / "snapshots" / NAMESPACE / info["snapshot_id"] / "quality.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    response = client.get(f"/v1/snapshots/{info['snapshot_id']}/quality")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"] == disk_quality
+
+
+def test_snapshot_quality_unknown_and_incomplete_return_404(client, tmp_path) -> None:
+    namespace_dir = _data_root(tmp_path) / "snapshots" / NAMESPACE
+    incomplete = namespace_dir / "snp_incomplete_0001"
+    incomplete.mkdir(parents=True)
+    (incomplete / "manifest.json").write_text(json.dumps({"content_hash": "x"}), encoding="utf-8")
+
+    for snapshot_id in ("snp_nosuch_0001", "snp_incomplete_0001"):
+        response = client.get(f"/v1/snapshots/{snapshot_id}/quality")
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "SNAPSHOT_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/snapshots/{snapshot_id}/artifact/{artifact_path}
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_artifact_route_serves_registered_files(client, tmp_path) -> None:
+    info = create_snapshot(**_snapshot_kwargs(_data_root(tmp_path)))
+    snapshot_dir = tmp_path / DATA_ROOT / "snapshots" / NAMESPACE / info["snapshot_id"]
+
+    for uri in ("tables/market/part-0.parquet", "quality.json", "manifest.json", "_SUCCESS"):
+        response = client.get(f"/v1/snapshots/{info['snapshot_id']}/artifact/{uri}")
+        assert response.status_code == 200, uri
+        assert response.content == (snapshot_dir / uri).read_bytes()
+
+
+def test_snapshot_artifact_route_serves_directory_artifact_files(client, tmp_path) -> None:
+    qlib_dir = _make_qlib_style_dir(tmp_path / "export")
+    info = create_snapshot(
+        **_snapshot_kwargs(
+            _data_root(tmp_path), extra_artifacts=[qlib_dir], qlib_provider_uri="qlib"
+        )
+    )
+    snapshot_dir = tmp_path / DATA_ROOT / "snapshots" / NAMESPACE / info["snapshot_id"]
+
+    response = client.get(
+        f"/v1/snapshots/{info['snapshot_id']}/artifact/qlib/features/600000/open.day.bin"
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"\x00\x01qlib-bin"
+    assert response.content == (
+        snapshot_dir / "qlib" / "features" / "600000" / "open.day.bin"
+    ).read_bytes()
+
+
+def test_snapshot_artifact_route_rejects_traversal(client, tmp_path) -> None:
+    info = create_snapshot(**_snapshot_kwargs(_data_root(tmp_path)))
+
+    # Literal dot segments are stripped by HTTP clients before the request is
+    # sent, so every "." is percent-encoded — the route must still reject the
+    # decoded path (and would equally reject a raw socket-level attempt).
+    for bad in (
+        "%2e%2e/secret",
+        "tables/%2e%2e/%2e%2e/manifest.json",
+        "%2e%2e%5csecret",
+        "a/%2e/b",
+        "/abs",
+        "a//b",
+    ):
+        response = client.get(f"/v1/snapshots/{info['snapshot_id']}/artifact/{bad}")
+        assert response.status_code == 400, bad
+        assert response.json()["error"]["code"] == "SNAPSHOT_INVALID_REQUEST"
+
+
+def test_snapshot_artifact_route_missing_and_incomplete_return_404(client, tmp_path) -> None:
+    info = create_snapshot(**_snapshot_kwargs(_data_root(tmp_path)))
+    namespace_dir = _data_root(tmp_path) / "snapshots" / NAMESPACE
+    incomplete = namespace_dir / "snp_incomplete_0001"
+    incomplete.mkdir(parents=True)
+    (incomplete / "manifest.json").write_text(json.dumps({"content_hash": "x"}), encoding="utf-8")
+
+    # missing files and whole directories are 404, never a listing
+    for uri in ("missing.bin", "tables", "tables/market"):
+        response = client.get(f"/v1/snapshots/{info['snapshot_id']}/artifact/{uri}")
+        assert response.status_code == 404, uri
+        assert response.json()["error"]["code"] == "SNAPSHOT_NOT_FOUND"
+
+    response = client.get("/v1/snapshots/snp_incomplete_0001/artifact/manifest.json")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "SNAPSHOT_NOT_FOUND"

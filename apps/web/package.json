@@ -7,7 +7,8 @@
     "dev": "vite",
     "lint": "tsc -p tsconfig.json --pretty false",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:web": "node --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "lucide-react": "^1.17.0",
