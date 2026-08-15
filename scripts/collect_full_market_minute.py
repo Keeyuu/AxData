@@ -174,8 +174,11 @@ def _run_batch(
     ]
     if kind.startswith("indices"):
         # deliberate driver-side routing: index minute rows land in the
-        # separate index_minute table (see module docstring for why)
-        argv += ["--output-dir", str(DATA_ROOT / "core" / "table=index_minute" / "parquet")]
+        # separate index_minute table (see module docstring for why).
+        # --output-dir takes the TABLE dir: the engine appends its own
+        # "parquet"/"logs" subdirs, so passing .../parquet would nest
+        # parquet/parquet (observed live 2026-08-16)
+        argv += ["--output-dir", str(DATA_ROOT / "core" / "table=index_minute")]
     t0 = time.time()
     result: dict | None = None
     for _attempt in range(max_retries + 1):
