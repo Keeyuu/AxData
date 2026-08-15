@@ -196,6 +196,22 @@ class DownloadWriter:
         total = len(formats)
         representative: WriteStrategyMetadata | None = None
 
+        if len(frame) == 0:
+            # zero-record runs must not land files: an empty parquet carries
+            # no schema (zero columns) and only pollutes the table directory
+            return WriteOutputsResult(
+                output_paths={},
+                metadata=WriteStrategyMetadata(
+                    write_mode=selected_write_mode,
+                    partition_by=partition_by,
+                    primary_key=primary_key,
+                    date_field=date_field,
+                    rows_written=0,
+                    rows_after=0,
+                    formats={},
+                ),
+            )
+
         for index, output_format in enumerate(formats):
             emit_progress(
                 progress_callback,
