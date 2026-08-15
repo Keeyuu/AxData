@@ -173,7 +173,14 @@ def _landed_codes(kind: str) -> set[str]:
         return cached[1]
     if not files:
         return set()
-    frames = [pd.read_parquet(f, columns=["tdx_code"]) for f in files]
+    frames = []
+    for f in files:
+        try:
+            frames.append(pd.read_parquet(f, columns=["tdx_code"]))
+        except Exception:  # noqa: BLE001 - zero-column debris from aborted runs
+            print(f"  warn: skipping unreadable/no-column file {f.name}", file=sys.stderr)
+    if not frames:
+        return set()
     landed = set(pd.concat(frames, ignore_index=True)["tdx_code"].unique())
     # full-table rescan is expensive (~17M rows for daily); retry loops call
     # this repeatedly, so cache keyed by directory signature (count + mtime)
@@ -313,8 +320,16 @@ def _verify() -> int:
         if not files:
             problems.append(f"{table}: no files")
             continue
-        frames = (pd.read_parquet(f, columns=[code_col, date_col, "tdx_code"]) for f in files)
-        df = pd.concat(list(frames), ignore_index=True)
+        frames = []
+        for f in files:
+            try:
+                frames.append(pd.read_parquet(f, columns=[code_col, date_col, "tdx_code"]))
+            except Exception:  # noqa: BLE001 - zero-column debris from aborted runs
+                print(f"  warn: skipping unreadable/no-column file {f.name}", file=sys.stderr)
+        if not frames:
+            problems.append(f"{table}: no readable files")
+            continue
+        df = pd.concat(frames, ignore_index=True)
         dup = df.duplicated(subset=[code_col, date_col]).sum()
         per = df.groupby(code_col)[date_col].agg(["count", "min", "max"])
         print(f"{table}: files={len(files)} rows={len(df)} codes={per.shape[0]} "
