@@ -1,83 +1,66 @@
-"""TDX price-limit and limit-up status rules."""
+"""TDX price-limit and limit-up status rules（弃用兼容层）。
+
+实现已迁移至 ``axdata_core.market_rules``，本文件仅保留兼容面：
+
+- 从 ``market_rules`` 直接 re-export 的纯函数：``st_type_from_name`` /
+  ``ipo_phase_from_name`` / ``round_price`` / ``price_close`` / ``price_at_or_above``；
+- 组合便捷函数与快照上下文辅助：``price_limit_name_flag``（ST 状态 + 上市阶段组合）/
+  ``rule_price_limits`` / ``special_limit_ratio`` / ``limit_ladder_status`` /
+  ``positive_number``；
+- ``price_limit_ratio_from_rule`` / ``price_limit_rule``：保持原签名的兼容薄封装，
+  内部按 ``date.today()`` 调 ``market_rules.limit_rule``（真实消费方已迁移到传日版本）。
+
+Deprecation: 本模块计划在下一个 minor 版本移除，新代码一律使用
+``axdata_core.market_rules``。
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
-from .normalize_utils import get_value, round_optional_float
+from axdata_core.market_rules import (
+    LimitRule,
+    board_from_tdx_code,
+    ipo_phase_from_name,
+    limit_rule,
+    price_at_or_above,
+    price_close,
+    round_price,
+    st_type_from_name,
+)
 
-
-def price_limit_ratio_from_rule(tdx_code: str, name_flag: str | None) -> float | None:
-    if name_flag in {"N", "C"}:
-        return None
-    if name_flag in {"ST", "*ST"}:
-        return 5.0
-    symbol = str(tdx_code[2:])
-    if tdx_code.startswith("bj"):
-        return 30.0
-    if tdx_code.startswith("sh") and symbol.startswith("688"):
-        return 20.0
-    if tdx_code.startswith("sz") and (symbol.startswith("300") or symbol.startswith("301")):
-        return 20.0
-    return 10.0
-
-
-def price_limit_rule(tdx_code: str, name_flag: str | None) -> str:
-    if name_flag == "N":
-        return "ipo_first_day"
-    if name_flag == "C":
-        return "ipo_first_5_days"
-    if name_flag in {"ST", "*ST"}:
-        return "st_5pct"
-    symbol = str(tdx_code[2:])
-    if tdx_code.startswith("bj"):
-        return "bse_30pct"
-    if tdx_code.startswith("sh") and symbol.startswith("688"):
-        return "star_20pct"
-    if tdx_code.startswith("sz") and (symbol.startswith("300") or symbol.startswith("301")):
-        return "chinext_20pct"
-    return "main_10pct"
+from .normalize_utils import round_optional_float
 
 
 def price_limit_name_flag(name: str | None) -> str | None:
-    text = str(name or "").strip().upper()
-    if not text:
-        return None
-    if text.startswith("*ST"):
-        return "*ST"
-    if text.startswith("ST"):
-        return "ST"
-    if text.startswith("N"):
-        return "N"
-    if text.startswith("C"):
-        return "C"
-    return None
+    """证券简称组合标记：先 ST 状态（*ST/ST，含 S*ST/SST），再上市阶段（N/C）。"""
+    st_type = st_type_from_name(name)
+    if st_type is not None:
+        return st_type
+    return ipo_phase_from_name(name)
 
 
-def st_type_from_name(name: Any) -> str | None:
-    text = str(name or "").strip().upper()
-    if not text:
-        return None
-    if text.startswith("*ST") or text.startswith("S*ST"):
-        return "*ST"
-    if text.startswith("ST") or text.startswith("SST"):
-        return "ST"
-    return None
+def price_limit_ratio_from_rule(tdx_code: str, name_flag: str | None) -> float | None:
+    """弃用：无日期参数的兼容薄封装，按今天日期解析规则（见模块 docstring）。"""
+    return _rule_for_compat(tdx_code, name_flag).ratio
 
 
-def price_limit_ratio(tdx_code: str, quote: Any) -> float:
-    symbol = str(tdx_code[2:])
-    name = str(get_value(quote, "name") or "")
-    if "ST" in name.upper():
-        return 5.0
-    if tdx_code.startswith("bj"):
-        return 30.0
-    if tdx_code.startswith("sh") and symbol.startswith("688"):
-        return 20.0
-    if tdx_code.startswith("sz") and (symbol.startswith("300") or symbol.startswith("301")):
-        return 20.0
-    return 10.0
+def price_limit_rule(tdx_code: str, name_flag: str | None) -> str:
+    """弃用：无日期参数的兼容薄封装，返回 ``LimitRule.rule_id``。"""
+    return _rule_for_compat(tdx_code, name_flag).rule_id
+
+
+def _rule_for_compat(tdx_code: str, name_flag: str | None) -> LimitRule:
+    st_type = name_flag if name_flag in {"ST", "*ST"} else None
+    ipo_phase = name_flag if name_flag in {"N", "C"} else None
+    return limit_rule(
+        board=board_from_tdx_code(tdx_code),
+        date=date.today(),
+        st_type=st_type,
+        ipo_phase=ipo_phase,
+    )
 
 
 def rule_price_limits(pre_close: Any, limit_ratio: float) -> tuple[float | None, float | None]:
@@ -96,33 +79,9 @@ def special_limit_ratio(pre_close: Any, limit_up_price: Any, limit_down_price: A
     return round_optional_float((float(limit_up_price) / float(pre_close) - 1.0) * 100.0)
 
 
-def round_price(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    return round(float(value) + 1e-9, 2)
-
-
 def positive_number(value: Any) -> bool:
     try:
         return float(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def price_close(left: Any, right: Any, *, tolerance: float = 0.0051) -> bool:
-    if left in (None, "") or right in (None, ""):
-        return False
-    try:
-        return abs(float(left) - float(right)) <= tolerance
-    except (TypeError, ValueError):
-        return False
-
-
-def price_at_or_above(left: Any, right: Any, *, tolerance: float = 0.0051) -> bool:
-    if left in (None, "") or right in (None, ""):
-        return False
-    try:
-        return float(left) + tolerance >= float(right)
     except (TypeError, ValueError):
         return False
 

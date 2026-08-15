@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from axdata_core.market_rules import session_context
+
 
 @dataclass(frozen=True)
 class PriceLimitCalendarDates:
@@ -56,18 +58,18 @@ def latest_daily_price_limit_calendar_dates(
             snapshot_base_field="pre_close",
         )
 
-    if bool(today_row.get("is_open")):
-        target_trade_date = today_text
-        pre_close_trade_date = str(today_row.get("pretrade_date") or "") or None
+    ctx = session_context(rows, today_value)
+    target_trade_date = ctx.target_for_preview or today_text
+    if ctx.is_open:
+        pre_close_trade_date = ctx.pretrade_date
         snapshot_base_field = "pre_close" if before_daily_close_buffer(now_value) else "last_price"
     else:
-        target_trade_date = str(today_row.get("next_trade_date") or "") or today_text
         target_row = by_date.get(target_trade_date)
         pre_close_trade_date = (
             str(target_row.get("pretrade_date") or "") or None if target_row is not None else None
         )
         if pre_close_trade_date is None:
-            pre_close_trade_date = str(today_row.get("pretrade_date") or "") or None
+            pre_close_trade_date = ctx.pretrade_date
         snapshot_base_field = "last_price"
 
     return PriceLimitCalendarDates(

@@ -22,15 +22,14 @@ from .normalize_utils import (
     tenk_to_unit,
     tenk_yuan,
 )
-from .price_limits import (
-    limit_ladder_status,
-    positive_number,
-    price_limit_name_flag,
-    price_limit_ratio_from_rule,
-    price_limit_rule,
-    rule_price_limits,
+from axdata_core.market_rules import (
+    board_from_tdx_code as market_rule_board_from_tdx_code,
+    ipo_phase_from_name,
+    limit_rule as market_limit_rule,
+    price_limits as market_rule_price_limits,
     st_type_from_name,
 )
+from .price_limits import limit_ladder_status, positive_number
 from .request_filters import board_matches
 from .security_codes import board_from_tdx_code
 from .snapshot_normalize import (
@@ -158,6 +157,17 @@ def _empty_auction_stats_alignment(status: str) -> dict[str, Any]:
     }
 
 
+def _price_limit_rule_date(target_trade_date: Any) -> str:
+    """涨跌停价行的规则日期：历史模式用 target_trade_date，快照模式用日历 target 日。"""
+    text = str(target_trade_date or "").strip()
+    return text or datetime.now().strftime("%Y%m%d")
+
+
+def _current_rule_date() -> str:
+    """连板天梯是实时行情扫描，规则按当天交易日解析。"""
+    return datetime.now().strftime("%Y%m%d")
+
+
 def normalize_daily_share_row(
     tdx_code: str,
     *,
@@ -243,9 +253,17 @@ def normalize_daily_price_limit_from_pre_close(
     exchange = MARKET_TO_EXCHANGE.get(tdx_code[:2], tdx_code[:2].upper())
     normalized_pre_close = round_optional_float(pre_close)
     normalized_pre_close_trade_date = str(pre_close_trade_date) if pre_close_trade_date not in (None, "") else None
-    name_flag = price_limit_name_flag(name)
-    limit_ratio = price_limit_ratio_from_rule(tdx_code, name_flag)
-    limit_rule = price_limit_rule(tdx_code, name_flag)
+    st_type = st_type_from_name(name)
+    ipo_phase = ipo_phase_from_name(name)
+    name_flag = ipo_phase or st_type
+    rule = market_limit_rule(
+        board=market_rule_board_from_tdx_code(tdx_code),
+        date=_price_limit_rule_date(target_trade_date),
+        st_type=st_type,
+        ipo_phase=ipo_phase,
+    )
+    limit_ratio = rule.ratio
+    limit_rule = rule.rule_id
     limit_status = "normal"
     if limit_ratio is None:
         limit_up_price = None
@@ -256,7 +274,7 @@ def normalize_daily_price_limit_from_pre_close(
         limit_down_price = None
         limit_status = "missing_pre_close"
     else:
-        limit_up_price, limit_down_price = rule_price_limits(normalized_pre_close, limit_ratio)
+        limit_up_price, limit_down_price = market_rule_price_limits(normalized_pre_close, rule)
 
     return {
         "trade_date": str(target_trade_date) if target_trade_date not in (None, "") else None,
@@ -289,15 +307,21 @@ def normalize_limit_ladder_row(
     if not tdx_code:
         return None
     board = board_from_tdx_code(tdx_code)
-    if not board_matches(board, boards):
+    if board is None or not board_matches(board, boards):
         return None
-    name_flag = price_limit_name_flag(name)
-    if name_flag in {"ST", "*ST"} or st_type_from_name(name):
+    st_type = st_type_from_name(name)
+    ipo_phase = ipo_phase_from_name(name)
+    if st_type is not None:
         return None
-    limit_ratio = price_limit_ratio_from_rule(tdx_code, name_flag)
-    if limit_ratio is None:
+    rule = market_limit_rule(
+        board=market_rule_board_from_tdx_code(tdx_code),
+        date=_current_rule_date(),
+        st_type=st_type,
+        ipo_phase=ipo_phase,
+    )
+    if rule.ratio is None:
         return None
-    limit_up_price, _limit_down_price = rule_price_limits(snapshot.get("pre_close"), limit_ratio)
+    limit_up_price, _limit_down_price = market_rule_price_limits(snapshot.get("pre_close"), rule)
     last_price = snapshot.get("last_price")
     pre_close = snapshot.get("pre_close")
     if not positive_number(last_price) or not positive_number(pre_close) or not positive_number(limit_up_price):
@@ -391,14 +415,18 @@ def limit_ladder_needs_name_lookup(
     tdx_code = str(snapshot.get("tdx_code") or "").lower()
     if not tdx_code:
         return False
-    if not board_matches(board_from_tdx_code(tdx_code), boards):
+    board = board_from_tdx_code(tdx_code)
+    if board is None or not board_matches(board, boards):
         return False
     if not limit_ladder_candidate(snapshot, include_touched=include_touched):
         return False
-    limit_ratio = price_limit_ratio_from_rule(tdx_code, None)
-    if limit_ratio is None:
+    rule = market_limit_rule(
+        board=market_rule_board_from_tdx_code(tdx_code),
+        date=_current_rule_date(),
+    )
+    if rule.ratio is None:
         return False
-    limit_up_price, _limit_down_price = rule_price_limits(snapshot.get("pre_close"), limit_ratio)
+    limit_up_price, _limit_down_price = market_rule_price_limits(snapshot.get("pre_close"), rule)
     if not positive_number(snapshot.get("last_price")) or not positive_number(snapshot.get("pre_close")):
         return False
     if not positive_number(limit_up_price):

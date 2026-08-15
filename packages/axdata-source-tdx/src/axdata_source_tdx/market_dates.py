@@ -9,6 +9,8 @@ from threading import RLock
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+from axdata_core.market_rules import session_context
+
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 AUCTION_READY_TIME = time(9, 25)
@@ -147,18 +149,19 @@ def _calendar_market_date_context(
     if today_row is None:
         return None
 
-    if _is_open(today_row.get("is_open")):
+    ctx = session_context(rows, today)
+    if ctx.is_open:
         ready = server_datetime.astimezone(SHANGHAI_TZ).time() >= AUCTION_READY_TIME
         return MarketDateContext(
-            target_trade_date=today_text,
-            previous_trade_date=_optional_text(today_row.get("pretrade_date")),
+            target_trade_date=ctx.target_for_review,
+            previous_trade_date=ctx.pretrade_date,
             server_datetime=server_datetime,
             phase="trading" if ready else "pre_auction",
             ready=ready,
             source="exchange_calendar+tdx_handshake",
         )
 
-    target_trade_date = _optional_text(today_row.get("pretrade_date"))
+    target_trade_date = ctx.target_for_review
     target_row = by_date.get(target_trade_date or "")
     previous_trade_date = (
         _optional_text(target_row.get("pretrade_date"))
@@ -237,11 +240,3 @@ def _request_calendar_rows(
 def _optional_text(value: Any) -> str | None:
     text = str(value or "").strip()
     return text or None
-
-
-def _is_open(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    return str(value or "").strip().lower() in {"1", "true", "yes", "open"}

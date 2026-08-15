@@ -160,7 +160,6 @@ _REQUEST_MODULE_COMPAT_EXPORTS: dict[str, tuple[str, str]] = {
     "_price_close": _tdx("price_limits", "price_close"),
     "_price_from_raw": _tdx("time_series_normalize", "price_from_raw"),
     "_price_limit_name_flag": _tdx("price_limits", "price_limit_name_flag"),
-    "_price_limit_ratio": _tdx("price_limits", "price_limit_ratio"),
     "_price_limit_ratio_from_rule": _tdx("price_limits", "price_limit_ratio_from_rule"),
     "_price_limit_rule": _tdx("price_limits", "price_limit_rule"),
     "_quote_level_at": _tdx("snapshot_normalize", "quote_level_at"),
