@@ -18,6 +18,8 @@ from time import perf_counter
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
+import os
+
 import pandas as pd
 
 from .downloader_engine import (
@@ -954,7 +956,9 @@ def _resolve_output_directory(
     elif data_root is not None:
         root_path = Path(data_root).expanduser().resolve()
     else:
-        root_path = (Path.cwd() / "data").resolve()
+        # env-aware default: a cwd-relative "./data" silently forks a second
+        # data root when AXDATA_DATA_DIR points elsewhere
+        root_path = Path(os.getenv("AXDATA_DATA_DIR") or str(Path.cwd() / "data")).expanduser().resolve()
     return root_path.joinpath(*profile.default_output_path_parts)
 
 
