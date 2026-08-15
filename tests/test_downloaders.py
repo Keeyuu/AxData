@@ -2153,7 +2153,7 @@ def test_stock_codes_downloader_writes_selected_formats(tmp_path, monkeypatch):
     assert len(result["snapshot_date"]) == 8
     assert result["snapshot_date_source"] == "collected_at"
     assert result["collection_time"].isdigit() is False
-    assert len(result["collection_time"]) == 13
+    assert len(result["collection_time"]) == 15  # YYYYMMDD_HHMMSS
     assert result["file_stem"] == f"stock_codes_tdx_{result['collection_time']}"
     assert result["connection_mode"] == "long_connection"
     assert result["connection_count"] == 3

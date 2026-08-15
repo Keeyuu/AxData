@@ -1176,7 +1176,9 @@ def _snapshot_date(
 
 
 def _collection_time(value: datetime) -> str:
-    return value.astimezone(LOCAL_TIMEZONE).strftime("%Y%m%d_%H%M")
+    # second resolution: minute-resolution stems collide (and silently
+    # overwrite) when two runs of the same dataset finish within one minute
+    return value.astimezone(LOCAL_TIMEZONE).strftime("%Y%m%d_%H%M%S")
 
 
 def _file_stem(profile: DownloaderProfile, *, snapshot_date: str, collection_time: str) -> str:
