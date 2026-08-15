@@ -250,14 +250,10 @@ def _collect(
     state = _load_state()
     done = set(state.get(kind, []))
     landed = _landed_codes(kind)
-    # reconcile against landed data first: a batch whose codes are already on
-    # disk is complete even if the state file missed it (killed between the
-    # write and the state save, or a batch-size change)
-    pending = [
-        (i, chunk)
-        for i, chunk in enumerate(batches)
-        if batch_key(chunk) not in done and not landed.intersection(chunk)
-    ]
+    # landed data is the ONLY truth: the state file once recorded batches as
+    # done whose files were later destroyed by the (fixed) same-minute stem
+    # collision, so state entries must never override the landed check
+    pending = [(i, chunk) for i, chunk in enumerate(batches) if not landed.intersection(chunk)]
     if not pending:
         print("nothing to do (all batches complete)")
         return 0
