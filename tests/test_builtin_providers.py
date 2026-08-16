@@ -662,7 +662,7 @@ def test_tdx_ext_plugin_provider_is_single_source_lightweight() -> None:
     scenario = _tdx_plugin_projection_results()["tdx_ext_plugin_provider_is_single_source_lightweight"]
     assert scenario["exit_code"] == 0
     assert scenario["provider_id"] == TDX_EXT_PROVIDER_ID
-    assert scenario["interfaces"] == 31
+    assert scenario["interfaces"] == 33
     assert scenario["downloaders"] == 0
     assert scenario["loaded"] == []
 

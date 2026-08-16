@@ -44,15 +44,17 @@ def _response(body: bytes, msg_type: int) -> ResponseFrame:
 
 def test_wave2_registration_counts_and_duplicate_code_collapse():
     # 29（Wave1 后）+ 15 个 MAC 命令名 + file_meta = 45 个注册名；
-    # mac_symbol_belong_board 与 mac_capital_flow 同码 0x1218，双名指向同一
-    # 路由 builder/parser，码键 dict 去重后 44。
-    assert len(COMMAND_CODE_ITEMS) == 45
-    assert len(COMMAND_METADATA_ITEMS) == 45
-    assert len(BUILDER_TARGET_ITEMS) == 45
-    assert len(PARSER_TARGET_ITEMS) == 45
-    assert len(COMMANDS) == 45
-    assert len(BUILDERS) == 44
-    assert len(PARSERS) == 44
+    # 计划 19 收口 wire 真缺口 4 命令（exchange_announcement 0x0002 /
+    # announcement 0x000a / klines_0523 0x0523 / historical_trades_basic
+    # 0x0fb5）→ 49 名。mac_symbol_belong_board 与 mac_capital_flow 同码
+    # 0x1218，双名指向同一路由 builder/parser，码键 dict 去重后 48。
+    assert len(COMMAND_CODE_ITEMS) == 49
+    assert len(COMMAND_METADATA_ITEMS) == 49
+    assert len(BUILDER_TARGET_ITEMS) == 49
+    assert len(PARSER_TARGET_ITEMS) == 49
+    assert len(COMMANDS) == 49
+    assert len(BUILDERS) == 48
+    assert len(PARSERS) == 48
     assert command_code("mac_symbol_belong_board") == 0x1218
     assert command_code("mac_capital_flow") == 0x1218
     assert BUILDERS[0x1218].__name__ == "build_mac_capital_flow_frame"

@@ -28,7 +28,7 @@ ensure_local_tdx_plugin_paths()
 # 计划 19 P1 注册 capital_flow(+1) 与 theme_members/theme_events(+2) 后，
 # TDX provider.json manifest 口径为 93（axdata_core sources catalog 仍为 90）。
 TDX_SOURCE_INTERFACE_COUNT = 93
-TDX_EXT_SOURCE_INTERFACE_COUNT = 31
+TDX_EXT_SOURCE_INTERFACE_COUNT = 33
 EXPECTED_SOURCE_REQUEST_INTERFACE_COUNT = (
     len(list_builtin_request_interfaces())
     + TDX_SOURCE_INTERFACE_COUNT

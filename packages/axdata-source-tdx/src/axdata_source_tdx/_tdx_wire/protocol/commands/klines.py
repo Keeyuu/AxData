@@ -5,13 +5,17 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from axdata_source_tdx._tdx_wire.protocol.frame import RequestFrame, ResponseFrame
 from axdata_source_tdx._tdx_wire._code_utils import normalize_code as _normalize_code, split_code as _split_code
 from axdata_source_tdx._tdx_wire._command_codes import command_code
 
+if TYPE_CHECKING:
+    from axdata_source_tdx._tdx_wire.models.kline import Kline0523Bar, Kline0523Series
+
 TYPE_KLINES = command_code("klines")
+TYPE_KLINES_0523 = command_code("klines_0523")
 _BINARY_MODULE = "axdata_source_tdx._tdx_wire._binary"
 _EXCEPTIONS_MODULE = "axdata_source_tdx._tdx_wire.exceptions"
 _MODEL_MODULE = "axdata_source_tdx._tdx_wire.models.kline"
@@ -19,12 +23,13 @@ _TIME_UTILS_MODULE = "axdata_source_tdx._tdx_wire._time_utils"
 _BINARY_EXPORTS = {
     "consume_tdx_signed_varint",
     "date_from_yyyymmdd",
+    "little_f32",
     "little_u16",
     "little_u32",
     "yyyymmdd",
 }
 _EXCEPTION_EXPORTS = {"ProtocolError"}
-_MODEL_EXPORTS = {"KlineBar", "KlineSeries"}
+_MODEL_EXPORTS = {"KlineBar", "KlineSeries", "Kline0523Bar", "Kline0523Series"}
 _TIME_EXPORTS = {"SHANGHAI_TZ"}
 
 
@@ -50,6 +55,10 @@ def _decode_compact_float(value: int) -> float:
 
 def _little_u16(data: bytes) -> int:
     return _binary().little_u16(data)
+
+
+def _little_f32(data: bytes) -> float:
+    return _binary().little_f32(data)
 
 
 def _little_u32(data: bytes) -> int:
@@ -143,6 +152,141 @@ def build_klines_frame(payload: dict[str, Any], msg_id: int) -> RequestFrame:
         + b"\x00" * 20
     )
     return RequestFrame(msg_id=msg_id, msg_type=TYPE_KLINES, data=data)
+
+
+KLINES_0523_RESERVED_SIZE = 8
+
+
+def build_klines_0523_frame(payload: dict[str, Any], msg_id: int) -> RequestFrame:
+    """Build the 0x0523 K-line request frame (gotdx ``NewGetSecurityBars``).
+
+    gotdx ``GetSecurityBarsRequest``：``<u16 market><code[6]><u16 category><u16
+    times><u16 start><u16 count><u16 adjust><reserved[8]>``，与 0x052D 偏移版同构
+    （``NewGetSecurityBarsOffset`` 仅改 Method）。构造器把用户请求条数 +1 后写入
+    count 字段（多取一条用于推算昨收），此处按 gotdx 原样移植。
+    """
+    market_id, _, number = split_code(payload["code"])
+    period_raw, period_param_raw = normalize_period(payload.get("period", "day"))
+    if period_param_raw == 0:
+        period_param_raw = 1  # gotdx applyRequest：Times==0 时补 1
+    start = int(payload.get("start", 0))
+    count = int(payload.get("count", 800))
+    if start < 0 or start > 0xFFFF:
+        raise ValueError("start must be between 0 and 65535")
+    if count <= 0 or count > 0xFFFF - 1:
+        raise ValueError("count must be between 1 and 65534")
+
+    adjust_mode_raw = normalize_adjust(payload.get("adjust"))
+    data = (
+        market_id.to_bytes(2, "little", signed=False)
+        + number.encode("ascii")
+        + period_raw.to_bytes(2, "little", signed=False)
+        + period_param_raw.to_bytes(2, "little", signed=False)
+        + start.to_bytes(2, "little", signed=False)
+        + (count + 1).to_bytes(2, "little", signed=False)
+        + adjust_mode_raw.to_bytes(2, "little", signed=False)
+        + b"\x00" * KLINES_0523_RESERVED_SIZE
+    )
+    return RequestFrame(msg_id=msg_id, msg_type=TYPE_KLINES_0523, data=data)
+
+
+def parse_klines_0523_payload(
+    response: ResponseFrame, request_payload: dict[str, Any] | None = None
+) -> Kline0523Series:
+    """Parse the 0x0523 K-line payload (gotdx ``GetSecurityBars.ParseResponse``).
+
+    与 0x052D 偏移版的核心差异：四个价格 varint 是绝对值（毫单位），不做
+    相对昨收的差分累加；vol/amount 为 getfloat32 原值。gotdx 在构造时多请求
+    一条并丢弃响应首条（用于给第一条补 ``pre_close``），此处按原样移植：
+    ``bars`` 为去头后的序列，``wire_count`` 保留响应原始条数。gotdx 的
+    up/down 嗅探分支因 ``decodeDateNum(..., index=false)`` 恒返回 ok 而为死
+    代码，0x0523 不读取 breadth 字段，``up_count``/``down_count`` 恒 None。
+    """
+    request_payload = request_payload or {}
+    payload = response.data
+    if len(payload) < 2:
+        raise _protocol_error()("invalid klines 0523 payload")
+
+    requested_code = request_payload.get("code", "sz000001")
+    market_id, exchange, number = split_code(requested_code)
+    period_raw, period_param_raw = normalize_period(request_payload.get("period", "day"))
+    start = int(request_payload.get("start", 0))
+    request_count = int(request_payload.get("count", 800))
+    adjust_mode_raw = normalize_adjust(request_payload.get("adjust"))
+
+    wire_count = _little_u16(payload[:2])
+    offset = 2
+    pre_close_raw = 0
+    kline_0523_bar = import_module(_MODEL_MODULE).Kline0523Bar
+    bars: list[Kline0523Bar] = []
+    for index in range(wire_count):
+        record_start = offset
+        if offset + 4 > len(payload):
+            raise _protocol_error()("truncated kline 0523 time field")
+        item_time = decode_kline_datetime(payload[offset : offset + 4], period_raw)
+        offset += 4
+
+        open_raw, offset = consume_varint(payload, offset)
+        close_raw, offset = consume_varint(payload, offset)
+        high_raw, offset = consume_varint(payload, offset)
+        low_raw, offset = consume_varint(payload, offset)
+
+        if offset + 8 > len(payload):
+            raise _protocol_error()("truncated kline 0523 volume or amount field")
+        vol = _little_f32(payload[offset : offset + 4])
+        offset += 4
+        amount = _little_f32(payload[offset : offset + 4])
+        offset += 4
+
+        bar_pre_close = milli_to_float(pre_close_raw)
+        pre_close_raw = close_raw
+        open_price = milli_to_float(open_raw)
+        close_price = milli_to_float(close_raw)
+
+        if bar_pre_close == 0:
+            rise_price = close_price - open_price
+            rise_rate = (close_price - open_price) / open_price * 100 if open_price else 0.0
+        else:
+            rise_price = close_price - bar_pre_close
+            rise_rate = (close_price - bar_pre_close) / bar_pre_close * 100
+
+        if index == 0:
+            # gotdx：首条（构造时多请求的那条）丢弃，仅用于推算昨收。
+            continue
+        bars.append(
+            kline_0523_bar(
+                time=item_time,
+                open=open_price,
+                close=close_price,
+                high=milli_to_float(high_raw),
+                low=milli_to_float(low_raw),
+                pre_close=bar_pre_close,
+                vol=vol,
+                amount=amount,
+                open_raw=open_raw,
+                close_raw=close_raw,
+                high_raw=high_raw,
+                low_raw=low_raw,
+                rise_price=rise_price,
+                rise_rate=rise_rate,
+                record_hex=payload[record_start:offset].hex(),
+            )
+        )
+
+    return import_module(_MODEL_MODULE).Kline0523Series(
+        exchange=exchange,
+        market_id=market_id,
+        code=number,
+        period_raw=period_raw,
+        period_param_raw=period_param_raw,
+        period_name=period_name(period_raw, period_param_raw),
+        start=start,
+        request_count=request_count,
+        wire_count=wire_count,
+        adjust_mode_raw=adjust_mode_raw,
+        bars=tuple(bars),
+        raw_payload=payload if request_payload.get("include_raw") else b"",
+    )
 
 
 def parse_klines_payload(response: ResponseFrame, request_payload: dict[str, Any] | None = None) -> KlineSeries:

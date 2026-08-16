@@ -87,6 +87,36 @@ class _Bar:
     settlement: float | None = None
 
 
+@dataclass(frozen=True)
+class _Board:
+    market: int
+    code: str
+    name: str
+    price: float | None
+    rise_speed: float
+    pre_close: float | None
+    symbol_market: int
+    symbol_code: str
+    symbol_name: str
+    symbol_price: float | None
+    symbol_rise_speed: float
+    symbol_pre_close: float | None
+
+
+@dataclass(frozen=True)
+class _Mapping:
+    category: int
+    name: str
+    unknown: int
+    index: int
+    switch: int
+    code1: float
+    code2: float
+    code3: float
+    code4: int
+    code5: int
+
+
 def _write_text(path, text: str) -> None:
     path.write_bytes(text.encode("gbk"))
 
@@ -213,6 +243,8 @@ def test_tdx_ext_catalog_registers_interfaces():
         "macro_indicators_tdx",
         "macro_indicator_snapshot_tdx",
         "macro_indicator_series_tdx",
+        "ex_board_list_tdx",
+        "ex_market_board_mapping_tdx",
     ):
         assert interface_name in names
 
@@ -256,6 +288,135 @@ def test_tdx_ext_adapter_supports_declared_interface_set():
 
     assert {name for name in SUPPORTED_INTERFACES if adapter.supports(name)} == SUPPORTED_INTERFACES
     assert adapter.supports("community_shadow_tdx") is False
+
+
+def test_tdx_ext_board_list_returns_ranking_rows(tmp_path, monkeypatch):
+    root = _build_cache_root(tmp_path)
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        @classmethod
+        def from_config(cls, **kwargs):
+            return cls(**kwargs)
+
+        def get_board_list(self, *, board_type, start, page_size):
+            assert (board_type, start, page_size) == (3, 0, 300)
+            return (
+                _Board(
+                    market=1,
+                    code="BK0001",
+                    name="玻璃玻纤",
+                    price=10.1,
+                    rise_speed=1.2,
+                    pre_close=9.9,
+                    symbol_market=47,
+                    symbol_code="IF2606",
+                    symbol_name="中证",
+                    symbol_price=12.3,
+                    symbol_rise_speed=0.4,
+                    symbol_pre_close=11.8,
+                ),
+            )
+
+    monkeypatch.setattr("axdata_core.adapters.tdx_ext.request.TdxExtClient", FakeClient)
+
+    result = request_interface(
+        "ex_board_list_tdx",
+        params={"tdx_root": str(root), "board_type": 3},
+    )
+
+    assert result.meta["source"] == "tdx_ext"
+    assert result.meta["data_origin"] == "tdx_extended_source"
+    assert result.records == [
+        {
+            "market": 1,
+            "code": "BK0001",
+            "name": "玻璃玻纤",
+            "price": 10.1,
+            "rise_speed": 1.2,
+            "pre_close": 9.9,
+            "symbol_market": 47,
+            "symbol_code": "IF2606",
+            "symbol_name": "中证",
+            "symbol_price": 12.3,
+            "symbol_rise_speed": 0.4,
+            "symbol_pre_close": 11.8,
+        }
+    ]
+
+    with pytest.raises(SourceRequestValidationError):
+        request_interface("ex_board_list_tdx", params={"tdx_root": str(root), "page_size": 0})
+
+
+def test_tdx_ext_market_board_mapping_returns_raw_slots(tmp_path, monkeypatch):
+    root = _build_cache_root(tmp_path)
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        @classmethod
+        def from_config(cls, **kwargs):
+            return cls(**kwargs)
+
+        def get_market_board_mapping(self, market, *, start, count):
+            assert (market, start, count) == (47, 0, 600)
+            return (
+                _Mapping(
+                    category=74,
+                    name="US Stock",
+                    unknown=8,
+                    index=99,
+                    switch=1,
+                    code1=1.1,
+                    code2=2.2,
+                    code3=3.3,
+                    code4=4,
+                    code5=5,
+                ),
+            )
+
+    monkeypatch.setattr("axdata_core.adapters.tdx_ext.request.TdxExtClient", FakeClient)
+
+    result = request_interface(
+        "ex_market_board_mapping_tdx",
+        params={"tdx_root": str(root)},
+    )
+
+    assert result.meta["source"] == "tdx_ext"
+    assert result.meta["data_origin"] == "tdx_extended_source"
+    assert result.records == [
+        {
+            "market": 47,
+            "category": 74,
+            "name": "US Stock",
+            "unknown": 8,
+            "index": 99,
+            "switch": 1,
+            "code1": 1.1,
+            "code2": 2.2,
+            "code3": 3.3,
+            "code4": 4,
+            "code5": 5,
+        }
+    ]
+
+    with pytest.raises(SourceRequestValidationError):
+        request_interface("ex_market_board_mapping_tdx", params={"tdx_root": str(root), "count": 0})
 
 
 def test_tdx_ext_request_interface_returns_futures_contracts(tmp_path):

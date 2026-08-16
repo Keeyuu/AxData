@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 COMMAND_CODE_ITEMS: tuple[tuple[str, int], ...] = (
+    ("exchange_announcement", 0x0002),
     ("heartbeat", 0x0004),
+    ("announcement", 0x000A),
     ("handshake", 0x000D),
     ("capital_changes", 0x000F),
     ("finance_info", 0x0010),
@@ -17,6 +19,7 @@ COMMAND_CODE_ITEMS: tuple[tuple[str, int], ...] = (
     ("intraday_subchart", 0x051B),
     ("index_momentum", 0x051C),
     ("index_info", 0x051D),
+    ("klines_0523", 0x0523),
     ("klines", 0x052D),
     ("today_intraday", 0x0537),
     ("legacy_quotes", 0x053E),
@@ -28,6 +31,7 @@ COMMAND_CODE_ITEMS: tuple[tuple[str, int], ...] = (
     ("auction_process", 0x056A),
     ("file_content", 0x06B9),
     ("historical_intraday", 0x0FB4),
+    ("historical_trades_basic", 0x0FB5),
     ("today_trades", 0x0FC5),
     ("historical_trades", 0x0FC6),
     ("chart_sampling", 0x0FD1),

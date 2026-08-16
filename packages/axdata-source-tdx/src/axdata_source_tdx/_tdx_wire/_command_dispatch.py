@@ -1,7 +1,9 @@
 """Provider-owned command dispatch target facts."""
 
 BUILDER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("exchange_announcement", ("announcements", "build_exchange_announcement_frame")),
     ("heartbeat", ("session", "build_heartbeat_frame")),
+    ("announcement", ("announcements", "build_announcement_frame")),
     ("handshake", ("session", "build_handshake_frame")),
     ("capital_changes", ("corporate", "build_capital_changes_frame")),
     ("finance_info", ("finance", "build_finance_info_frame")),
@@ -15,6 +17,7 @@ BUILDER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str]], ...] = (
     ("intraday_subchart", ("subchart", "build_intraday_subchart_frame")),
     ("index_momentum", ("index", "build_index_momentum_frame")),
     ("index_info", ("index", "build_index_info_frame")),
+    ("klines_0523", ("klines", "build_klines_0523_frame")),
     ("klines", ("klines", "build_klines_frame")),
     ("today_intraday", ("intraday", "build_today_intraday_frame")),
     ("legacy_quotes", ("quotes", "build_legacy_quotes_frame")),
@@ -26,6 +29,7 @@ BUILDER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str]], ...] = (
     ("auction_process", ("auction", "build_auction_process_frame")),
     ("file_content", ("resources", "build_file_content_frame")),
     ("historical_intraday", ("intraday", "build_historical_intraday_frame")),
+    ("historical_trades_basic", ("trades", "build_historical_trades_basic_frame")),
     ("today_trades", ("trades", "build_today_trades_frame")),
     ("historical_trades", ("trades", "build_historical_trades_frame")),
     ("chart_sampling", ("chart_sampling", "build_chart_sampling_frame")),
@@ -53,7 +57,9 @@ BUILDER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str]], ...] = (
 )
 
 PARSER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str, bool]], ...] = (
+    ("exchange_announcement", ("announcements", "parse_exchange_announcement_payload", False)),
     ("heartbeat", ("session", "parse_heartbeat_payload", False)),
+    ("announcement", ("announcements", "parse_announcement_payload", False)),
     ("handshake", ("session", "parse_handshake_payload", False)),
     ("capital_changes", ("corporate", "parse_capital_changes_payload", True)),
     ("finance_info", ("finance", "parse_finance_info_payload", True)),
@@ -67,6 +73,7 @@ PARSER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str, bool]], ...] = (
     ("intraday_subchart", ("subchart", "parse_intraday_subchart_payload", True)),
     ("index_momentum", ("index", "parse_index_momentum_payload", True)),
     ("index_info", ("index", "parse_index_info_payload", True)),
+    ("klines_0523", ("klines", "parse_klines_0523_payload", True)),
     ("klines", ("klines", "parse_klines_payload", True)),
     ("today_intraday", ("intraday", "parse_today_intraday_payload", True)),
     ("legacy_quotes", ("quotes", "parse_legacy_quotes_payload", True)),
@@ -78,6 +85,7 @@ PARSER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str, bool]], ...] = (
     ("auction_process", ("auction", "parse_auction_process_payload", True)),
     ("file_content", ("resources", "parse_file_content_payload", True)),
     ("historical_intraday", ("intraday", "parse_historical_intraday_payload", True)),
+    ("historical_trades_basic", ("trades", "parse_historical_trades_basic_payload", True)),
     ("today_trades", ("trades", "parse_today_trades_payload", True)),
     ("historical_trades", ("trades", "parse_historical_trades_payload", True)),
     ("chart_sampling", ("chart_sampling", "parse_chart_sampling_payload", True)),

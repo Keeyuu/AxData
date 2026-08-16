@@ -8,10 +8,12 @@ from typing import Any
 from axdata_core.source_errors import SourceAdapterNotFound, SourceRequestValidationError
 
 from .interface_sets import (
+    BOARD_LIST_INTERFACE,
     EXT_ASSET_INTERFACE_TO_TYPE,
     FUND_NAV_INTERFACE,
     INTRADAY_INTERFACE_TO_TYPE,
     KLINE_INTERFACE_TO_TYPE,
+    MARKET_BOARD_MAPPING_INTERFACE,
     OPTION_CHAIN_INTERFACE,
     QUOTE_INTERFACE_TO_TYPE,
     SUPPORTED_INTERFACES,
@@ -27,6 +29,7 @@ from .request_params import (
     contains_filter as _contains_filter,
     exchange_filter as _exchange_filter,
     float_param as _float_param,
+    int_param as _int_param,
     limit_param as _limit_param,
     normalize_code as _normalize_code,
     optional_text as _optional_text,
@@ -43,6 +46,7 @@ from .request_execution import request_items as _tdx_ext_request_items
 from .request_execution import request_quotes as _tdx_ext_request_quotes
 from .request_normalize import (
     bar_to_row as _bar_to_row,
+    board_to_row as _board_to_row,
     empty_option_chain_row as _empty_option_chain_row,
     instrument_to_row as _instrument_to_row,
     intraday_to_row as _intraday_to_row,
@@ -50,6 +54,7 @@ from .request_normalize import (
     macro_indicator_category_from_symbol as _macro_indicator_category_from_symbol,
     macro_metadata as _macro_metadata,
     macro_snapshot_row as _macro_snapshot_row,
+    market_board_mapping_to_row as _market_board_mapping_to_row,
     normalize_trade_price as _normalize_trade_price,
     open_close_type as _open_close_type,
     option_chain_rows as _option_chain_rows,
@@ -180,6 +185,12 @@ class TdxExtRequestAdapter:
         elif interface_name == FUND_NAV_INTERFACE:
             rows = self._request_fund_nav(params, root=root)
             origin = "local_tdx_extended_cache"
+        elif interface_name == BOARD_LIST_INTERFACE:
+            rows = self._request_board_list(params, root=root)
+            origin = "tdx_extended_source"
+        elif interface_name == MARKET_BOARD_MAPPING_INTERFACE:
+            rows = self._request_market_board_mapping(params, root=root)
+            origin = "tdx_extended_source"
         else:
             rows = self._request_instruments(interface_name, params, root=root)
             origin = "local_tdx_extended_cache"
@@ -271,6 +282,49 @@ class TdxExtRequestAdapter:
     ) -> list[dict[str, Any]]:
         instruments = _resolve_requested_instruments(params, asset_type="fund", root=root)
         return _tdx_ext_fund_nav_rows(instruments)
+
+    def _request_board_list(
+        self,
+        params: Mapping[str, Any],
+        *,
+        root: str | None,
+    ) -> list[dict[str, Any]]:
+        board_type = _int_param(params.get("board_type"), name="board_type", default=0)
+        start = _int_param(params.get("start"), name="start", default=0)
+        page_size = _int_param(params.get("page_size"), name="page_size", default=300, minimum=1)
+        limit = _limit_param(params, default=1000, maximum=1000)
+        timeout = _float_param(params.get("timeout"), default=6.0)
+        client_factory = _tdx_ext_client_class()
+        with client_factory.from_config(
+            tdx_root=root,
+            server_cache_root=self._server_cache_root(),
+            timeout=timeout,
+        ) as client:
+            boards = client.get_board_list(board_type=board_type, start=start, page_size=page_size)
+        return [_board_to_row(board) for board in boards[:limit]]
+
+    def _request_market_board_mapping(
+        self,
+        params: Mapping[str, Any],
+        *,
+        root: str | None,
+    ) -> list[dict[str, Any]]:
+        market = _int_param(params.get("market"), name="market", default=47)
+        start = _int_param(params.get("start"), name="start", default=0)
+        count = _int_param(params.get("count"), name="count", default=600, minimum=1)
+        limit = _limit_param(params, default=1000, maximum=1000)
+        timeout = _float_param(params.get("timeout"), default=6.0)
+        client_factory = _tdx_ext_client_class()
+        with client_factory.from_config(
+            tdx_root=root,
+            server_cache_root=self._server_cache_root(),
+            timeout=timeout,
+        ) as client:
+            mappings = client.get_market_board_mapping(market, start=start, count=count)
+        return [
+            _market_board_mapping_to_row(mapping, market=market)
+            for mapping in mappings[:limit]
+        ]
 
     def _request_trades(
         self,

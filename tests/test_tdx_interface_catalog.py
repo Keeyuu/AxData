@@ -14,7 +14,7 @@ ensure_local_tdx_plugin_paths()
 from axdata_source_tdx.tdx_f10_specs import F10_INTERFACE_SPECS
 
 TDX_SOURCE_INTERFACE_COUNT = 93
-TDX_EXT_SOURCE_INTERFACE_COUNT = 31
+TDX_EXT_SOURCE_INTERFACE_COUNT = 33
 
 
 def list_request_interface_names():

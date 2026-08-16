@@ -1227,16 +1227,19 @@ def test_tdx_provider_wire_command_codec_uses_lightweight_dispatch_facts() -> No
     # 计划 19 §4.2 P2（Wave2-B）：MAC 余族 15 命令名 + file_meta 0x02C5 注册，
     # 29→45 名；mac_symbol_belong_board 与 mac_capital_flow 同码 0x1218（双名
     # 指向同一路由 builder/parser），码键 dict 去重后 builder/parser 各 44。
-    assert "builder_count=44" in result.stdout
-    assert "parser_count=44" in result.stdout
+    # 计划 19 收口（wire 真缺口）：announcement 0x000A / exchange_announcement
+    # 0x0002 / klines_0523 0x0523 / historical_trades_basic 0x0FB5 四命令新码
+    # 注册，45→49 名、44→48 个码键 builder/parser。
+    assert "builder_count=48" in result.stdout
+    assert "parser_count=48" in result.stdout
     assert "command_codes_after_tables=True" in result.stdout
     assert "command_dispatch_after_tables=True" in result.stdout
     assert "command_codes_export_cached_after_tables=False" in result.stdout
     assert "builder_targets_export_cached_after_tables=False" in result.stdout
     assert "parser_targets_export_cached_after_tables=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
-    assert "explicit_builder_targets=45" in result.stdout
-    assert "explicit_parser_targets=45" in result.stdout
+    assert "explicit_builder_targets=49" in result.stdout
+    assert "explicit_parser_targets=49" in result.stdout
 
 
 def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> None:
@@ -1284,9 +1287,9 @@ def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> N
     assert "core_wire=False" in result.stdout
     assert "codec_builders_cached=False" in result.stdout
     assert "codec_parsers_cached=False" in result.stdout
-    # Wave2-B 后：45 个注册名，0x1218 同码双名去重 → 44 个码键 builder/parser。
-    assert "builder_count=44" in result.stdout
-    assert "parser_count=44" in result.stdout
+    # Wave2-B 后 45 名 + 收口 4 命令 = 49 个注册名；0x1218 同码双名去重 → 48 个码键 builder/parser。
+    assert "builder_count=48" in result.stdout
+    assert "parser_count=48" in result.stdout
     assert "provider_command_codes_export_cached_after_tables=False" in result.stdout
     assert "provider_builder_targets_export_cached_after_tables=False" in result.stdout
     assert "provider_parser_targets_export_cached_after_tables=False" in result.stdout
@@ -2348,7 +2351,7 @@ def test_tdx_provider_wire_command_registry_root_import_is_lightweight() -> None
     assert "required_before_commands=heartbeat,handshake,security_list,security_count" in result.stdout
     assert "has_commands_after_required=False" in result.stdout
     assert "root_lookup_after_required=False" in result.stdout
-    assert "command_count=45" in result.stdout
+    assert "command_count=49" in result.stdout
     assert "command_codes_export_cached_after_commands=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
     assert "command_codes_export_cached_after_explicit=True" in result.stdout
@@ -2416,7 +2419,7 @@ def test_tdx_provider_wire_command_registry_compat_import_is_lazy() -> None:
     assert "command_code=0x53e" in result.stdout
     assert "command_codes_after_call=True" in result.stdout
     assert "metadata_after_call=False" in result.stdout
-    assert "command_count=45" in result.stdout
+    assert "command_count=49" in result.stdout
     assert "metadata_after_commands=True" in result.stdout
     assert "codec_after_commands=False" in result.stdout
     assert "core_wire=False" in result.stdout
@@ -2452,7 +2455,7 @@ def test_tdx_provider_wire_command_aggregates_use_root_registry() -> None:
     )
 
     assert "same=True" in result.stdout
-    assert "command_count=45" in result.stdout
+    assert "command_count=49" in result.stdout
     assert "registry_root=True" in result.stdout
     assert "legacy_registry=False" in result.stdout
     assert "commands_package=True" in result.stdout

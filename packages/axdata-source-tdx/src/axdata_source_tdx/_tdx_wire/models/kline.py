@@ -56,3 +56,55 @@ class KlineSeries:
     @property
     def count(self) -> int:
         return len(self.bars)
+
+
+@dataclass(frozen=True, slots=True)
+class Kline0523Bar:
+    """0x0523 K 线单条（gotdx ``SecurityBar``）。
+
+    价格为绝对毫单位（区别 0x052D 偏移版的差分编码）；``pre_close`` 来自前一
+    条（含被丢弃的响应首条）的收盘。``up_count``/``down_count`` 镜像 gotdx 结构
+    字段，但其嗅探分支为死代码，恒为 None。
+    """
+
+    time: datetime
+    open: float
+    close: float
+    high: float
+    low: float
+    pre_close: float
+    vol: float
+    amount: float
+    open_raw: int
+    close_raw: int
+    high_raw: int
+    low_raw: int
+    rise_price: float
+    rise_rate: float
+    up_count: int | None = None
+    down_count: int | None = None
+    record_hex: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Kline0523Series:
+    exchange: str
+    market_id: int
+    code: str
+    period_raw: int
+    period_param_raw: int
+    period_name: str
+    start: int
+    request_count: int
+    wire_count: int
+    adjust_mode_raw: int
+    bars: tuple[Kline0523Bar, ...]
+    raw_payload: bytes = b""
+
+    @property
+    def full_code(self) -> str:
+        return f"{self.exchange}{self.code}"
+
+    @property
+    def count(self) -> int:
+        return len(self.bars)

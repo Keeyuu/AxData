@@ -354,3 +354,36 @@ def macro_metadata(symbol: Any) -> dict[str, str | None]:
         "2_CPI": {"unit": "元", "frequency": "月"},
     }
     return metadata.get(key, {"unit": None, "frequency": None})
+
+
+def board_to_row(board: Any) -> dict[str, Any]:
+    return {
+        "market": board.market,
+        "code": board.code,
+        "name": board.name,
+        "price": board.price,
+        "rise_speed": board.rise_speed,
+        "pre_close": board.pre_close,
+        "symbol_market": board.symbol_market,
+        "symbol_code": board.symbol_code,
+        "symbol_name": board.symbol_name,
+        "symbol_price": board.symbol_price,
+        "symbol_rise_speed": board.symbol_rise_speed,
+        "symbol_pre_close": board.symbol_pre_close,
+    }
+
+
+def market_board_mapping_to_row(mapping: Any, *, market: int) -> dict[str, Any]:
+    return {
+        "market": market,
+        "category": mapping.category,
+        "name": mapping.name,
+        "unknown": mapping.unknown,
+        "index": mapping.index,
+        "switch": mapping.switch,
+        "code1": mapping.code1,
+        "code2": mapping.code2,
+        "code3": mapping.code3,
+        "code4": mapping.code4,
+        "code5": mapping.code5,
+    }

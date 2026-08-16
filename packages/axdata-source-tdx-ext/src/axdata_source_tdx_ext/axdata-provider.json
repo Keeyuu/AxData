@@ -9415,6 +9415,352 @@
       "description_zh": "请求宏观指标序列，返回日期和值；单位未确认时保持为空。",
       "params_note_zh": "默认不用传 tdx_root；只有 API 服务器上的通达信安装目录不是常见位置，或想指定某个 hq_cache 目录时才需要传。",
       "params_example_zh": "# 宏观指标序列\nclient.call(\"macro_indicator_series_tdx\", code=\"1_GDP.MACRO\", period=\"day\", limit=3)"
+    },
+    {
+      "name": "ex_board_list_tdx",
+      "display_name_zh": "扩展板块榜单",
+      "source_code": "tdx_ext",
+      "source_name_zh": "通达信扩展行情",
+      "category": "基础数据",
+      "menu_path": [
+        "通达信扩展行情",
+        "基础数据"
+      ],
+      "asset_class": "stock",
+      "request_mode": "source_request",
+      "collection": {
+        "supported": false,
+        "default_profile": null
+      },
+      "parameters": [
+        {
+          "name": "board_type",
+          "display_name_zh": "板块类型：0 行业、3 概念、4 风格、5 地区、255 全部；默认 0。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 0,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "板块类型：0 行业、3 概念、4 风格、5 地区、255 全部；默认 0。"
+        },
+        {
+          "name": "start",
+          "display_name_zh": "分页起始位置，默认 0。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 0,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "分页起始位置，默认 0。"
+        },
+        {
+          "name": "page_size",
+          "display_name_zh": "每页向源端请求的条数，默认 300。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 300,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "每页向源端请求的条数，默认 300。"
+        },
+        {
+          "name": "limit",
+          "display_name_zh": "返回前多少行，默认 1000。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 1000,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "返回前多少行，默认 1000。"
+        },
+        {
+          "name": "tdx_root",
+          "display_name_zh": "本机通达信目录（可选，高级）",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "本机通达信目录（可选，高级）：用于读取本机通达信扩展行情代码表；不填时自动发现。远程调用时指 API 服务器上的通达信目录，不是浏览器所在电脑。"
+        }
+      ],
+      "fields": [
+        {
+          "name": "market",
+          "display_name_zh": "源端板块市场编号。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端板块市场编号。"
+        },
+        {
+          "name": "code",
+          "display_name_zh": "板块代码。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "板块代码。"
+        },
+        {
+          "name": "name",
+          "display_name_zh": "板块名称。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "板块名称。"
+        },
+        {
+          "name": "price",
+          "display_name_zh": "板块最新价；源端有值时返回。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "板块最新价；源端有值时返回。"
+        },
+        {
+          "name": "rise_speed",
+          "display_name_zh": "板块涨跌幅。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "板块涨跌幅。"
+        },
+        {
+          "name": "pre_close",
+          "display_name_zh": "板块昨收；源端有值时返回。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "板块昨收；源端有值时返回。"
+        },
+        {
+          "name": "symbol_market",
+          "display_name_zh": "领涨品种市场编号。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种市场编号。"
+        },
+        {
+          "name": "symbol_code",
+          "display_name_zh": "领涨品种代码。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种代码。"
+        },
+        {
+          "name": "symbol_name",
+          "display_name_zh": "领涨品种名称。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种名称。"
+        },
+        {
+          "name": "symbol_price",
+          "display_name_zh": "领涨品种最新价；源端有值时返回。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种最新价；源端有值时返回。"
+        },
+        {
+          "name": "symbol_rise_speed",
+          "display_name_zh": "领涨品种涨跌幅。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种涨跌幅。"
+        },
+        {
+          "name": "symbol_pre_close",
+          "display_name_zh": "领涨品种昨收；源端有值时返回。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "领涨品种昨收；源端有值时返回。"
+        }
+      ]
+    },
+    {
+      "name": "ex_market_board_mapping_tdx",
+      "display_name_zh": "扩展市场板块映射",
+      "source_code": "tdx_ext",
+      "source_name_zh": "通达信扩展行情",
+      "category": "基础数据",
+      "menu_path": [
+        "通达信扩展行情",
+        "基础数据"
+      ],
+      "asset_class": "stock",
+      "request_mode": "source_request",
+      "collection": {
+        "supported": false,
+        "default_profile": null
+      },
+      "parameters": [
+        {
+          "name": "market",
+          "display_name_zh": "扩展市场编号，如 47 中金所期货；默认 47。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 47,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "扩展市场编号，如 47 中金所期货；默认 47。"
+        },
+        {
+          "name": "start",
+          "display_name_zh": "分页起始位置，默认 0。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 0,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "分页起始位置，默认 0。"
+        },
+        {
+          "name": "count",
+          "display_name_zh": "每页向源端请求的条数，默认 600。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 600,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "每页向源端请求的条数，默认 600。"
+        },
+        {
+          "name": "limit",
+          "display_name_zh": "返回前多少行，默认 1000。",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 1000,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "返回前多少行，默认 1000。"
+        },
+        {
+          "name": "tdx_root",
+          "display_name_zh": "本机通达信目录（可选，高级）",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "本机通达信目录（可选，高级）：用于读取本机通达信扩展行情代码表；不填时自动发现。远程调用时指 API 服务器上的通达信目录，不是浏览器所在电脑。"
+        }
+      ],
+      "fields": [
+        {
+          "name": "market",
+          "display_name_zh": "请求的扩展市场编号。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "请求的扩展市场编号。"
+        },
+        {
+          "name": "category",
+          "display_name_zh": "映射的板块/类别编号。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "映射的板块/类别编号。"
+        },
+        {
+          "name": "name",
+          "display_name_zh": "映射的板块/类别名称。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "映射的板块/类别名称。"
+        },
+        {
+          "name": "unknown",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "index",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "switch",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "code1",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "code2",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "code3",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "code4",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        },
+        {
+          "name": "code5",
+          "display_name_zh": "源端原始字段，语义未确认。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "源端原始字段，语义未确认。"
+        }
+      ]
     }
   ],
   "downloaders": [],

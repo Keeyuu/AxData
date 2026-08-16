@@ -26,7 +26,7 @@ TDX_EXT_PROVIDER_ID = "axdata.source.tdx_ext_external"
 BUILTIN_TDX_EXT_PROVIDER_ID = "axdata.source.tdx_ext"
 TDX_EXT_INTERFACE_NAME = "futures_contracts_tdx"
 TDX_EXT_SOURCE_NAME_ZH = "通达信扩展行情"
-TDX_EXT_INTERFACE_COUNT = 31
+TDX_EXT_INTERFACE_COUNT = 33
 
 
 def test_tdx_ext_provider_package_root_import_is_lightweight(monkeypatch, tmp_path) -> None:

@@ -84,6 +84,36 @@ class TdxExtIntradayPoint:
 
 
 @dataclass(frozen=True, slots=True)
+class TdxExtBoard:
+    market: int
+    code: str
+    name: str
+    price: float | None
+    rise_speed: float
+    pre_close: float | None
+    symbol_market: int
+    symbol_code: str
+    symbol_name: str
+    symbol_price: float | None
+    symbol_rise_speed: float
+    symbol_pre_close: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class TdxExtMarketBoardMapping:
+    category: int
+    name: str
+    unknown: int
+    index: int
+    switch: int
+    code1: float
+    code2: float
+    code3: float
+    code4: int
+    code5: int
+
+
+@dataclass(frozen=True, slots=True)
 class TdxExtTrade:
     market: int
     code: str

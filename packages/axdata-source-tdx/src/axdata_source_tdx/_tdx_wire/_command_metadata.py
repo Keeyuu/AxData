@@ -1,7 +1,21 @@
 """Provider-owned command registry metadata facts."""
 
 COMMAND_METADATA_ITEMS: tuple[tuple[str, str, str, bool, str], ...] = (
+    (
+        "exchange_announcement",
+        "session",
+        "exchange_announcement",
+        False,
+        "gotdx proto/server.go（KMSG_EXCHANGEANNOUNCE=0x0002 交易所公告）",
+    ),
     ("heartbeat", "session", "heartbeat", True, "0x0004-心跳保活接口.md"),
+    (
+        "announcement",
+        "session",
+        "announcement",
+        False,
+        "gotdx proto/server.go（KMSG_ANNOUNCEMENT=0x000a 服务商公告）",
+    ),
     ("handshake", "session", "handshake", True, "0x000d-连接握手接口.md"),
     ("capital_changes", "corporate", "capital_changes", False, "0x000f-股本变迁查询接口.md"),
     ("finance_info", "finance", "info", False, "0x0010-财务信息批量查询&下发接口.md"),
@@ -15,6 +29,13 @@ COMMAND_METADATA_ITEMS: tuple[tuple[str, str, str, bool, str], ...] = (
     ("intraday_subchart", "intraday", "subchart", False, "0x051b-个股分时副图数据接口.md"),
     ("index_momentum", "index", "momentum", False, "0x051c-指数动量接口.md"),
     ("index_info", "index", "info", False, "0x051d-指数概况接口.md"),
+    (
+        "klines_0523",
+        "bars",
+        "get_0523",
+        False,
+        "gotdx proto/get_security_bars.go（NewGetSecurityBars 0x0523，区别 0x052d 偏移版）",
+    ),
     ("klines", "bars", "get", False, "0x052d-K线周期数据接口.md"),
     ("today_intraday", "intraday", "today", False, "0x0537-个股当前日分时图接口.md"),
     ("legacy_quotes", "quotes", "legacy", False, "0x053e-旧版批量行情快照接口.md"),
@@ -26,6 +47,13 @@ COMMAND_METADATA_ITEMS: tuple[tuple[str, str, str, bool, str], ...] = (
     ("auction_process", "auction", "process", False, "0x056a-集合竞价明细接口.md"),
     ("file_content", "resources", "download_chunk", False, "0x06b9-文件资源下载接口.md"),
     ("historical_intraday", "intraday", "historical", False, "0x0fb4-历史分时数据接口.md"),
+    (
+        "historical_trades_basic",
+        "trades",
+        "historical_basic",
+        False,
+        "gotdx proto/get_history_transaction_data.go（0x0fb5 基础版，区别 0x0fc6）",
+    ),
     ("today_trades", "trades", "today", False, "0x0fc5-当日成交明细分页接口.md"),
     ("historical_trades", "trades", "historical", False, "0x0fc6-历史成交明细增强分页接口.md"),
     (

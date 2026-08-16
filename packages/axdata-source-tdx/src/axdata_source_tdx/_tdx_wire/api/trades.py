@@ -32,3 +32,22 @@ class TradeApi(ApiBase):
             count=count,
             include_raw=include_raw,
         )
+
+    def historical_basic(
+        self,
+        code: str,
+        *,
+        trade_date,
+        start: int = 0,
+        count: int = 900,
+        include_raw: bool = False,
+    ):
+        """0x0FB5 基础历史成交（无委托数字段，价格按 baseUnit 缩放）。"""
+        return self._execute(
+            "historical_trades_basic",
+            code=code,
+            trade_date=trade_date,
+            start=start,
+            count=count,
+            include_raw=include_raw,
+        )

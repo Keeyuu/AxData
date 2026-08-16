@@ -17,3 +17,11 @@ class SessionApi(ApiBase):
 
     def server_info(self):
         return self._execute("server_info")
+
+    def announcement(self):
+        """服务商公告（gotdx ``GetAnnouncement``，0x000A）。"""
+        return self._execute("announcement")
+
+    def exchange_announcement(self):
+        """交易所公告（gotdx ``GetExchangeAnnouncement``，0x0002）。"""
+        return self._execute("exchange_announcement")

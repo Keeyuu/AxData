@@ -10,10 +10,12 @@ from dataclasses import dataclass
 
 from .exceptions import ConnectionClosedError, ProtocolError, ResponseTimeoutError
 from .models import (
+    TdxExtBoard,
     TdxExtIntradayPoint,
     TdxExtInstrument,
     TdxExtKlineBar,
     TdxExtMarket,
+    TdxExtMarketBoardMapping,
     TdxExtQuote,
     TdxExtQuoteLevel,
     TdxExtTrade,
@@ -148,6 +150,36 @@ class TdxExtClient:
         body = struct.pack("<BHHHH", int(market), int(sort_type), int(start), int(count), 2 if reverse else 1)
         package = _package(0x2484, body)
         return parse_quotes_list_response(self._execute_once(package))
+
+    def get_board_list(
+        self,
+        board_type: int = 0,
+        *,
+        start: int = 0,
+        page_size: int = 300,
+    ) -> tuple[TdxExtBoard, ...]:
+        if start < 0:
+            raise ValueError("start must be >= 0")
+        if page_size <= 0:
+            raise ValueError("page_size must be > 0")
+        body = struct.pack("<HHBBHH8x", int(page_size), int(board_type), 0, 1, int(start), 1)
+        package = _package(0x1231, body)
+        return parse_board_list_response(self._execute_once(package))
+
+    def get_market_board_mapping(
+        self,
+        market: int,
+        *,
+        start: int = 0,
+        count: int = 600,
+    ) -> tuple[TdxExtMarketBoardMapping, ...]:
+        if start < 0:
+            raise ValueError("start must be >= 0")
+        if count <= 0:
+            raise ValueError("count must be > 0")
+        body = struct.pack("<HII", int(market), int(start), int(count))
+        package = _package(0x2562, body)
+        return parse_market_board_mapping_response(self._execute_once(package))
 
     def get_quote_multi(self, code_list: Sequence[tuple[int, str]]) -> tuple[TdxExtQuote, ...]:
         if not code_list:
@@ -408,6 +440,88 @@ def parse_quotes_list_response(body: bytes) -> tuple[TdxExtQuote, ...]:
 
 def parse_quotes_multi_response(body: bytes) -> tuple[TdxExtQuote, ...]:
     return parse_quotes_list_response(body)
+
+
+def parse_board_list_response(body: bytes) -> tuple[TdxExtBoard, ...]:
+    if len(body) < 4:
+        return ()
+    _, count = struct.unpack("<HH", body[:4])
+    rows: list[TdxExtBoard] = []
+    for i in range(count):
+        start = 4 + 160 * i
+        end = start + 160
+        if end > len(body):
+            raise ProtocolError("truncated extended board list response")
+        (
+            market,
+            raw_code,
+            raw_name,
+            price,
+            rise_speed,
+            pre_close,
+            symbol_market,
+            raw_symbol_code,
+            raw_symbol_name,
+            symbol_price,
+            symbol_rise_speed,
+            symbol_pre_close,
+        ) = struct.unpack("<H22s44sfffH22s44sfff", body[start:end])
+        rows.append(
+            TdxExtBoard(
+                market=market,
+                code=_decode_text(raw_code),
+                name=_decode_text(raw_name),
+                price=_none_zero_price(price),
+                rise_speed=float(rise_speed),
+                pre_close=_none_zero_price(pre_close),
+                symbol_market=symbol_market,
+                symbol_code=_decode_text(raw_symbol_code),
+                symbol_name=_decode_text(raw_symbol_name),
+                symbol_price=_none_zero_price(symbol_price),
+                symbol_rise_speed=float(symbol_rise_speed),
+                symbol_pre_close=_none_zero_price(symbol_pre_close),
+            )
+        )
+    return tuple(rows)
+
+
+def parse_market_board_mapping_response(body: bytes) -> tuple[TdxExtMarketBoardMapping, ...]:
+    if len(body) < 2:
+        return ()
+    count, = struct.unpack("<H", body[:2])
+    rows: list[TdxExtMarketBoardMapping] = []
+    for i in range(count):
+        start = 2 + 48 * i
+        end = start + 48
+        if end > len(body):
+            raise ProtocolError("truncated extended market board mapping response")
+        (
+            category,
+            raw_name,
+            unknown,
+            index,
+            switch,
+            code1,
+            code2,
+            code3,
+            code4,
+            code5,
+        ) = struct.unpack("<H23sHIBfffHH", body[start:end])
+        rows.append(
+            TdxExtMarketBoardMapping(
+                category=category,
+                name=_decode_text(raw_name),
+                unknown=unknown,
+                index=index,
+                switch=switch,
+                code1=float(code1),
+                code2=float(code2),
+                code3=float(code3),
+                code4=code4,
+                code5=code5,
+            )
+        )
+    return tuple(rows)
 
 
 def parse_kline_response(body: bytes) -> tuple[TdxExtKlineBar, ...]:

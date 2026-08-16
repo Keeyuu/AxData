@@ -5,12 +5,14 @@ import zlib
 
 from axdata_core.adapters.tdx_ext.client import (
     _package,
+    parse_board_list_response,
     parse_instrument_count_response,
     parse_instrument_info_response,
     parse_instrument_quote_response,
     parse_history_transaction_response,
     parse_kline2_response,
     parse_markets_response,
+    parse_market_board_mapping_response,
     parse_quotes_multi_response,
     parse_transaction_response,
 )
@@ -193,6 +195,95 @@ def test_parse_kline2_response_decodes_extended_volume_interest_and_settlement()
     assert row.open_interest == 40211
     assert row.volume == 58561
     assert round(row.settlement or 0, 1) == 8685.4
+
+
+def test_parse_board_list_response_decodes_rows():
+    body = struct.pack("<HH", 0, 2)
+    body += struct.pack(
+        "<H22s44sfffH22s44sfff",
+        1,
+        b"BK0001",
+        "玻璃玻纤".encode("gbk").ljust(44, b"\x00"),
+        10.1,
+        1.2,
+        9.9,
+        47,
+        b"IF2606",
+        "中证".encode("gbk").ljust(44, b"\x00"),
+        12.3,
+        0.4,
+        11.8,
+    )
+    body += struct.pack(
+        "<H22s44sfffH22s44sfff",
+        2,
+        b"BK0002",
+        "宏观策略".encode("gbk").ljust(44, b"\x00"),
+        0.0,
+        0.0,
+        0.0,
+        0,
+        b"",
+        b"\x00" * 44,
+        0.0,
+        0.0,
+        0.0,
+    )
+
+    rows = parse_board_list_response(body)
+
+    assert len(rows) == 2
+    row = rows[0]
+    assert row.market == 1
+    assert row.code == "BK0001"
+    assert row.name == "玻璃玻纤"
+    assert round(row.price or 0, 1) == 10.1
+    assert round(row.rise_speed, 1) == 1.2
+    assert round(row.pre_close or 0, 1) == 9.9
+    assert row.symbol_market == 47
+    assert row.symbol_code == "IF2606"
+    assert row.symbol_name == "中证"
+    assert round(row.symbol_price or 0, 1) == 12.3
+    assert round(row.symbol_rise_speed, 1) == 0.4
+    assert round(row.symbol_pre_close or 0, 1) == 11.8
+    empty = rows[1]
+    assert empty.price is None
+    assert empty.rise_speed == 0.0
+    assert empty.pre_close is None
+    assert empty.symbol_price is None
+    assert empty.symbol_rise_speed == 0.0
+
+
+def test_parse_market_board_mapping_response_decodes_rows():
+    body = struct.pack("<H", 1)
+    body += struct.pack(
+        "<H23sHIBfffHH",
+        74,
+        "US Stock".encode("gbk").ljust(23, b"\x00"),
+        8,
+        99,
+        1,
+        1.1,
+        2.2,
+        3.3,
+        4,
+        5,
+    )
+
+    rows = parse_market_board_mapping_response(body)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.category == 74
+    assert row.name == "US Stock"
+    assert row.unknown == 8
+    assert row.index == 99
+    assert row.switch == 1
+    assert round(row.code1, 1) == 1.1
+    assert round(row.code2, 1) == 2.2
+    assert round(row.code3, 1) == 3.3
+    assert row.code4 == 4
+    assert row.code5 == 5
 
 
 def test_parse_transaction_response_decodes_paged_rows_and_marker():

@@ -48,7 +48,7 @@ EXPECTED_OPTIONAL_PROVIDERS: tuple[ExpectedProvider, ...] = (
         source_name_zh="通达信扩展行情",
         package_hint="axdata-source-tdx-ext",
         install_hint="请安装/启用 TDX Ext 扩展行情插件。",
-        interface_count=31,
+        interface_count=33,
         status_message="TDX Ext 扩展行情插件未安装或当前 Python 环境不可发现；扩展行情接口不会出现在运行目录。",
         next_action="需要期货、期权、基金、债券、外汇、宏观等扩展行情接口时，请安装/启用 TDX Ext 扩展行情插件。",
     ),

@@ -530,7 +530,7 @@ def test_plugin_list_shows_missing_tdx_providers_when_not_discovered(capsys, mon
     ext = providers[TDX_EXT_PROVIDER_ID]
     assert ext["status"] == "missing"
     assert ext["source_name_zh"] == "通达信扩展行情"
-    assert ext["interface_count"] == 31
+    assert ext["interface_count"] == 33
     assert ext["install_source"] == "missing"
     assert ext["can_enable"] is False
     assert ext["can_uninstall"] is False

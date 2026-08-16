@@ -130,6 +130,18 @@ def bool_param(value: Any, *, default: bool) -> bool:
     raise SourceRequestValidationError("boolean param must be true or false")
 
 
+def int_param(value: Any, *, name: str, default: int, minimum: int = 0) -> int:
+    if value in (None, ""):
+        return default
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise SourceRequestValidationError(f"{name} must be an integer") from exc
+    if result < minimum:
+        raise SourceRequestValidationError(f"{name} must be >= {minimum}")
+    return result
+
+
 def float_param(value: Any, *, default: float) -> float:
     if value in (None, ""):
         return default

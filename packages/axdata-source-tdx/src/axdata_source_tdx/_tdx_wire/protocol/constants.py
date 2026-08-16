@@ -9,10 +9,12 @@ _COMMAND_CODES_MODULE = "axdata_source_tdx._tdx_wire._command_codes"
 _FRAME_CONSTANTS_MODULE = "axdata_source_tdx._tdx_wire.protocol._frame_constants"
 _REQUEST_DEFAULTS_MODULE = "axdata_source_tdx._tdx_wire._request_defaults"
 _COMMAND_EXPORTS = {
+    "TYPE_ANNOUNCEMENT": "announcement",
     "TYPE_AUCTION_PROCESS": "auction_process",
     "TYPE_CAPITAL_CHANGES": "capital_changes",
     "TYPE_CATEGORY_QUOTES": "category_quotes",
     "TYPE_CHART_SAMPLING": "chart_sampling",
+    "TYPE_EXCHANGE_ANNOUNCEMENT": "exchange_announcement",
     "TYPE_EXPLICIT_QUOTES": "explicit_quotes",
     "TYPE_FILE_CONTENT": "file_content",
     "TYPE_FILE_META": "file_meta",
@@ -21,10 +23,12 @@ _COMMAND_EXPORTS = {
     "TYPE_HEARTBEAT": "heartbeat",
     "TYPE_HISTORICAL_INTRADAY": "historical_intraday",
     "TYPE_HISTORICAL_TRADES": "historical_trades",
+    "TYPE_HISTORICAL_TRADES_BASIC": "historical_trades_basic",
     "TYPE_INDEX_INFO": "index_info",
     "TYPE_INDEX_MOMENTUM": "index_momentum",
     "TYPE_INTRADAY_SUBCHART": "intraday_subchart",
     "TYPE_KLINES": "klines",
+    "TYPE_KLINES_0523": "klines_0523",
     "TYPE_LEGACY_QUOTES": "legacy_quotes",
     "TYPE_MAC_AUCTION": "mac_auction",
     "TYPE_MAC_BOARD_LIST": "mac_board_list",

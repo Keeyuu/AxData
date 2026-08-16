@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .api.resources import ResourceApi
     from .api.session import SessionApi
     from .api.trades import TradeApi
+    from .models.announcement import AnnouncementNotice, ExchangeAnnouncementInfo
     from .models.auction import AuctionProcessSeries
     from .models.board import TopBoardPage
     from .models.chart_sampling import ChartSamplingSeries
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
         RecentHistoricalIntradaySeries,
         TodayIntradaySeries,
     )
-    from .models.kline import KlineSeries
+    from .models.kline import Kline0523Series, KlineSeries
     from .models.mac_auction import MacAuctionPage
     from .models.mac_board import MacBoardListPage
     from .models.mac_board_members import (
@@ -60,7 +61,7 @@ if TYPE_CHECKING:
     from .models.security_old import SecurityListOldPage
     from .models.server_info import ServerInfo
     from .models.subchart import IntradaySubchartSeries
-    from .models.trade import TradeDetailSeries
+    from .models.trade import BasicTradeSeries, TradeDetailSeries
     from .models.unusual import UnusualPage
     from .models.volume_profile import VolumeProfileSnapshot
     from .transport.base import Transport
@@ -515,6 +516,48 @@ class TdxClient:
 
     def get_server_info(self) -> ServerInfo:
         return self.session.server_info()
+
+    def get_announcement(self) -> AnnouncementNotice:
+        return self.session.announcement()
+
+    def get_exchange_announcement(self) -> ExchangeAnnouncementInfo:
+        return self.session.exchange_announcement()
+
+    def get_historical_trades_basic(
+        self,
+        code: str,
+        *,
+        trade_date,
+        start: int = 0,
+        count: int = 900,
+        include_raw: bool = False,
+    ) -> BasicTradeSeries:
+        return self.trades.historical_basic(
+            code,
+            trade_date=trade_date,
+            start=start,
+            count=count,
+            include_raw=include_raw,
+        )
+
+    def get_klines_0523(
+        self,
+        code: str,
+        *,
+        period: str = "day",
+        start: int = 0,
+        count: int = 800,
+        adjust: str | None = None,
+        include_raw: bool = False,
+    ) -> Kline0523Series:
+        return self.bars.get_0523(
+            code,
+            period=period,
+            start=start,
+            count=count,
+            adjust=adjust,
+            include_raw=include_raw,
+        )
 
     def get_chart_sampling(
         self,
