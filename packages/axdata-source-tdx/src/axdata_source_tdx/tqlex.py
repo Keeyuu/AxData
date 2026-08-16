@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -250,21 +251,42 @@ class IcfqsClient:
         return url
 
     def request_icfqs(self, entry: str, params: list[Any]) -> dict[str, Any]:
-        """POST one ICFQS request, routed to the entry's gateway family."""
+        """POST one ICFQS request (``{Params, oauth_zzfw}`` form), routed to the
+        entry's gateway family."""
 
+        payload = json.dumps(
+            {"Params": params, "oauth_zzfw": "1"}, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
+        return self._post_icfqs(self._entry_definition(entry), payload, _parse_icfqs_json)
+
+    def request_icfqs_json(self, entry: str, body: Any) -> dict[str, Any]:
+        """POST a raw JSON body to an ICFQS entry (gotdx ``PostJSON`` form).
+
+        Same entry registry, gateway routing and pool rotation as
+        ``request_icfqs``; the body is serialized and posted verbatim, without
+        the Params/oauth_zzfw wrapper. Used by the HQServ entry family
+        (topic_quotes / topic_rotation / quotes_batch). The response is parsed
+        as a plain JSON object (gotdx ``json.Unmarshal``), with the tolerant
+        brace scanner as a fallback for junk-prefixed payloads.
+        """
+
+        payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        return self._post_icfqs(self._entry_definition(entry), payload, _parse_icfqs_json_object)
+
+    def _entry_definition(self, entry: str) -> IcfqsEntry:
         name = str(entry or "").strip()
         definition = ICFQS_ENTRIES.get(name)
         if definition is None:
             raise ValueError(f"unknown icfqs entry: {name!r}")
-        base_url = self.default_url if definition.gateway == "default" else self.hot_url
-        payload = json.dumps(
-            {"Params": params, "oauth_zzfw": "1"}, ensure_ascii=False, separators=(",", ":")
-        ).encode("utf-8")
+        return definition
+
+    def _post_icfqs(
+        self, definition: IcfqsEntry, payload: bytes, parse: Callable[[bytes], Any]
+    ) -> dict[str, Any]:
         last_error: Exception | None = None
         attempts = len(self._default_pool) if definition.gateway == "default" else 1
         for _ in range(attempts):
-            if definition.gateway == "default":
-                base_url = self._next_default_url()
+            base_url = self._next_default_url() if definition.gateway == "default" else self.hot_url
             request = Request(
                 f"{base_url}/TQLEX?{urlencode({'Entry': definition.entry})}",
                 data=payload,
@@ -278,7 +300,7 @@ class IcfqsClient:
             try:
                 with urlopen(request, timeout=self.timeout) as response:
                     raw = response.read()
-                decoded = _parse_icfqs_json(raw)
+                decoded = parse(raw)
                 if not isinstance(decoded, dict):
                     raise ValueError("ICFQS response must be a JSON object")
                 return decoded
@@ -371,6 +393,19 @@ def _parse_icfqs_json(raw: bytes) -> Any:
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"cannot parse icfqs response: {_icfqs_preview(raw)}") from exc
     raise ValueError(f"cannot parse icfqs response: {_icfqs_preview(raw)}")
+
+
+def _parse_icfqs_json_object(raw: bytes) -> Any:
+    """Parse a standard JSON object response (gotdx PostJSON: plain json.Unmarshal).
+
+    Falls back to the tolerant brace scanner when the gateway prefixes junk
+    bytes before the JSON body (observed on TQL responses from these hosts).
+    """
+
+    try:
+        return json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _parse_icfqs_json(raw)
 
 
 def _icfqs_preview(raw: bytes) -> str:

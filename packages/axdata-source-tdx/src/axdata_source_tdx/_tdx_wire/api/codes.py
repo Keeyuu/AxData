@@ -14,6 +14,14 @@ class CodeApi(ApiBase):
     def list(self, market: str, *, start: int = 0, limit: int = 1600):
         return self._execute("security_list", market=market, start=start, limit=limit)
 
+    def list_old(self, market: str, *, start: int = 0, include_raw: bool = False):
+        return self._execute(
+            "security_list_old",
+            market=market,
+            start=start,
+            include_raw=include_raw,
+        )
+
     def all(self, market: str, *, page_size: int = DEFAULT_CODE_PAGE_SIZE):
         start = 0
         items = []

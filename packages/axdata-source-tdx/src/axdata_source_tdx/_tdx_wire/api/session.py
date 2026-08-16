@@ -14,3 +14,6 @@ class SessionApi(ApiBase):
 
     def heartbeat(self):
         return self._execute("heartbeat")
+
+    def server_info(self):
+        return self._execute("server_info")

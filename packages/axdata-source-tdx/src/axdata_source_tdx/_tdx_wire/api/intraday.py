@@ -36,3 +36,6 @@ class IntradayApi(ApiBase):
             trade_date=trade_date,
             include_raw=include_raw,
         )
+
+    def chart_sampling(self, code: str, *, include_raw: bool = False):
+        return self._execute("chart_sampling", code=code, include_raw=include_raw)

@@ -11,6 +11,9 @@ class ResourceApi(ApiBase):
     def download_chunk(self, path: str, *, offset: int = 0, size: int = DEFAULT_FILE_CHUNK_SIZE):
         return self._execute("file_content", path=path, offset=offset, size=size)
 
+    def file_meta(self, path: str):
+        return self._execute("file_meta", path=path)
+
     def download_file(
         self,
         path: str,

@@ -42,6 +42,9 @@ class QuoteApi(ApiBase):
     def price_limits(self, *, start_index: int = 0):
         return self._execute("price_limits", start_index=start_index)
 
+    def volume_profile(self, code: str, *, include_raw: bool = False):
+        return self._execute("volume_profile", code=code, include_raw=include_raw)
+
     def price_limits_all(self):
         records = []
         start_index = 0

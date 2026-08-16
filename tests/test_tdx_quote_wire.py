@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 _TDX_PROVIDER_SRC = str(Path(__file__).resolve().parents[1] / "packages" / "axdata-source-tdx" / "src")
 sys.path.insert(0, _TDX_PROVIDER_SRC)
 
@@ -211,6 +213,82 @@ def test_parse_price_limits_payload_decodes_special_limit_record():
     assert round(item.limit_up_price, 2) == 12.34
     assert round(item.limit_down_price, 2) == 8.76
     assert item.record_hex == record.hex()
+
+
+def test_build_price_limits_frame_encodes_feature452_count_form():
+    frame = build_command_frame(TYPE_PRICE_LIMITS, {"start_index": 9, "count": 2}, msg_id=6)
+
+    assert frame.msg_id == 6
+    assert frame.msg_type == TYPE_PRICE_LIMITS
+    assert frame.data == struct.pack("<IIIH", 9, 2, 1, 0)
+
+
+def test_build_price_limits_frame_applies_feature452_zero_defaults():
+    frame = build_command_frame(TYPE_PRICE_LIMITS, {"start": 3, "count": 0}, msg_id=6)
+
+    assert frame.data == struct.pack("<IIIH", 3, 2000, 1, 0)
+
+
+def _feature452_response(payload: bytes) -> ResponseFrame:
+    return ResponseFrame(
+        control=0,
+        msg_id=1,
+        msg_type=TYPE_PRICE_LIMITS,
+        zip_length=len(payload),
+        length=len(payload),
+        data=payload,
+        raw=b"",
+    )
+
+
+def test_parse_security_feature452_payload_decodes_gotdx_layout():
+    from axdata_source_tdx._tdx_wire.protocol.commands.price_limits import (
+        parse_security_feature452_payload,
+    )
+
+    record_sh = bytes([1]) + (600000).to_bytes(4, "little") + struct.pack("<ff", 1.25, 2.5)
+    record_sz = bytes([0]) + (1).to_bytes(4, "little") + struct.pack("<ff", 3.75, 4.5)
+    payload = (2).to_bytes(2, "little") + record_sh + record_sz
+
+    records = parse_security_feature452_payload(
+        _feature452_response(payload), {"start_index": 0, "count": 2}
+    )
+
+    assert len(records) == 2
+    assert records[0].market == 1
+    assert records[0].code == "600000"
+    assert records[0].p1 == 1.25
+    assert records[0].p2 == 2.5
+    assert records[1].market == 0
+    assert records[1].code == "1"
+    assert records[1].p1 == 3.75
+    assert records[1].p2 == 4.5
+
+
+def test_parse_security_feature452_payload_ignores_trailing_bytes():
+    from axdata_source_tdx._tdx_wire.protocol.commands.price_limits import (
+        parse_security_feature452_payload,
+    )
+
+    record = bytes([1]) + (600000).to_bytes(4, "little") + struct.pack("<ff", 1.25, 2.5)
+    payload = (1).to_bytes(2, "little") + record + b"\xcc\xdd"
+
+    records = parse_security_feature452_payload(_feature452_response(payload), None)
+
+    assert len(records) == 1
+    assert records[0].code == "600000"
+
+
+def test_parse_security_feature452_payload_rejects_truncated_item():
+    from axdata_source_tdx._tdx_wire.exceptions import ProtocolError
+    from axdata_source_tdx._tdx_wire.protocol.commands.price_limits import (
+        parse_security_feature452_payload,
+    )
+
+    payload = (2).to_bytes(2, "little") + bytes(13) + bytes(5)
+
+    with pytest.raises(ProtocolError, match="invalid price limit item 1"):
+        parse_security_feature452_payload(_feature452_response(payload), None)
 
 
 def test_build_refresh_quote_frame_encodes_cursor_items():

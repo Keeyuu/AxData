@@ -16,26 +16,53 @@ if TYPE_CHECKING:
     from .api.codes import CodeApi
     from .api.corporate import CorporateApi
     from .api.finance import FinanceApi
+    from .api.index import IndexApi
     from .api.intraday import IntradayApi
     from .api.mac import MacApi
+    from .api.market import MarketApi
     from .api.quotes import QuoteApi
     from .api.resources import ResourceApi
     from .api.session import SessionApi
     from .api.trades import TradeApi
     from .models.auction import AuctionProcessSeries
+    from .models.board import TopBoardPage
+    from .models.chart_sampling import ChartSamplingSeries
     from .models.corporate import CapitalChangeBlock
     from .models.finance import FinanceInfoBlock
+    from .models.index import IndexInfoSnapshot, IndexMomentumSeries
     from .models.intraday import (
         HistoricalIntradaySeries,
         RecentHistoricalIntradaySeries,
         TodayIntradaySeries,
     )
     from .models.kline import KlineSeries
+    from .models.mac_auction import MacAuctionPage
+    from .models.mac_board import MacBoardListPage
+    from .models.mac_board_members import (
+        MacBoardMembersDynamicPage,
+        MacBoardMembersPage,
+        MacBoardMembersQuotesPage,
+    )
+    from .models.mac_file import MacFileDownloadChunk, MacFileListMeta
+    from .models.mac_kline_offset import MacKlineOffset
+    from .models.mac_market_monitor import MacMarketMonitorPage
+    from .models.mac_quotes import MacQuotesSnapshot
+    from .models.mac_server_info import MacServerInfo
+    from .models.mac_symbol_bars import MacSymbolBarsPage
+    from .models.mac_symbol_belong_board import MacSymbolBelongBoardList
+    from .models.mac_symbol_info import MacSymbolInfo
+    from .models.mac_symbol_quotes import MacSymbolQuotesPage
+    from .models.mac_tick_charts import MacTickChartsPage
+    from .models.mac_transactions import MacTransactionsPage
     from .models.quote import CategoryQuotePage, ExplicitQuote, LegacyQuote, QuoteRefreshBatch
-    from .models.resource import FileContentChunk
+    from .models.resource import FileContentChunk, FileMeta
     from .models.security import SecurityCode
+    from .models.security_old import SecurityListOldPage
+    from .models.server_info import ServerInfo
     from .models.subchart import IntradaySubchartSeries
     from .models.trade import TradeDetailSeries
+    from .models.unusual import UnusualPage
+    from .models.volume_profile import VolumeProfileSnapshot
     from .transport.base import Transport
 
 
@@ -68,6 +95,8 @@ class TdxClient:
     _resources: ResourceApi | None = field(default=None, init=False, repr=False)
     _trades: TradeApi | None = field(default=None, init=False, repr=False)
     _mac: MacApi | None = field(default=None, init=False, repr=False)
+    _index: IndexApi | None = field(default=None, init=False, repr=False)
+    _market: MarketApi | None = field(default=None, init=False, repr=False)
     _code_count_cache: dict[str, int] = field(init=False, repr=False)
     _codes_all_cache: dict[str, list[SecurityCode]] = field(init=False, repr=False)
 
@@ -155,6 +184,22 @@ class TdxClient:
     @mac.setter
     def mac(self, value: MacApi) -> None:
         self._mac = value
+
+    @property
+    def index(self) -> IndexApi:
+        return self._api("_index", "api.index", "IndexApi")
+
+    @index.setter
+    def index(self, value: IndexApi) -> None:
+        self._index = value
+
+    @property
+    def market(self) -> MarketApi:
+        return self._api("_market", "api.market", "MarketApi")
+
+    @market.setter
+    def market(self, value: MarketApi) -> None:
+        self._market = value
 
     @property
     def session(self) -> SessionApi:
@@ -457,6 +502,272 @@ class TdxClient:
             count=count,
             include_raw=include_raw,
         )
+
+    def get_security_list_old(
+        self,
+        exchange,
+        *,
+        start: int = 0,
+        include_raw: bool = False,
+    ) -> SecurityListOldPage:
+        market = _normalize_market(exchange)
+        return self.codes.list_old(market, start=start, include_raw=include_raw)
+
+    def get_server_info(self) -> ServerInfo:
+        return self.session.server_info()
+
+    def get_chart_sampling(
+        self,
+        code: str,
+        *,
+        include_raw: bool = False,
+    ) -> ChartSamplingSeries:
+        return self.intraday.chart_sampling(code, include_raw=include_raw)
+
+    def get_volume_profile(
+        self,
+        code: str,
+        *,
+        include_raw: bool = False,
+    ) -> VolumeProfileSnapshot:
+        return self.quotes.volume_profile(code, include_raw=include_raw)
+
+    def get_index_info(
+        self,
+        code: str,
+        *,
+        include_raw: bool = False,
+    ) -> IndexInfoSnapshot:
+        return self.index.info(code, include_raw=include_raw)
+
+    def get_index_momentum(
+        self,
+        code: str,
+        *,
+        include_raw: bool = False,
+    ) -> IndexMomentumSeries:
+        return self.index.momentum(code, include_raw=include_raw)
+
+    def get_top_board(
+        self,
+        *,
+        category: int = 0,
+        mode: int = 5,
+        size: int = 20,
+        include_raw: bool = False,
+    ) -> TopBoardPage:
+        return self.market.top_board(
+            category=category,
+            mode=mode,
+            size=size,
+            include_raw=include_raw,
+        )
+
+    def get_unusual(
+        self,
+        exchange,
+        *,
+        start: int = 0,
+        count: int = 600,
+        include_raw: bool = False,
+    ) -> UnusualPage:
+        market = _normalize_market(exchange)
+        return self.market.unusual(market, start=start, count=count, include_raw=include_raw)
+
+    def get_file_meta(self, path: str) -> FileMeta:
+        return self.resources.file_meta(path)
+
+    def get_mac_server_info(self, *, include_raw: bool = False) -> MacServerInfo:
+        return self.mac.server_info(include_raw=include_raw)
+
+    def get_mac_quotes(
+        self,
+        code: str,
+        *,
+        query_date: int = 0,
+        include_raw: bool = False,
+    ) -> MacQuotesSnapshot:
+        return self.mac.quotes(code, query_date=query_date, include_raw=include_raw)
+
+    def get_mac_symbol_quotes(
+        self,
+        securities: Sequence[str],
+        *,
+        field_bitmap: bytes | None = None,
+        include_raw: bool = False,
+    ) -> MacSymbolQuotesPage:
+        return self.mac.symbol_quotes(
+            securities, field_bitmap=field_bitmap, include_raw=include_raw
+        )
+
+    def get_mac_symbol_bars(
+        self,
+        code: str,
+        *,
+        period: int = 4,
+        times: int = 1,
+        start: int = 0,
+        count: int = 800,
+        adjust: int = 0,
+        include_raw: bool = False,
+    ) -> MacSymbolBarsPage:
+        return self.mac.symbol_bars(
+            code,
+            period=period,
+            times=times,
+            start=start,
+            count=count,
+            adjust=adjust,
+            include_raw=include_raw,
+        )
+
+    def get_mac_symbol_info(self, code: str, *, include_raw: bool = False) -> MacSymbolInfo:
+        return self.mac.symbol_info(code, include_raw=include_raw)
+
+    def get_mac_symbol_belong_board(
+        self, code: str, *, include_raw: bool = False
+    ) -> MacSymbolBelongBoardList:
+        return self.mac.symbol_belong_board(code, include_raw=include_raw)
+
+    def get_mac_board_count(self, board_type: int = 0) -> MacBoardListPage:
+        return self.mac.board_count(board_type)
+
+    def get_mac_board_list(
+        self,
+        board_type: int = 0,
+        *,
+        start: int = 0,
+        page_size: int = 150,
+        include_raw: bool = False,
+    ) -> MacBoardListPage:
+        return self.mac.board_list(
+            board_type, start=start, page_size=page_size, include_raw=include_raw
+        )
+
+    def get_mac_board_members(
+        self,
+        board_symbol: str,
+        *,
+        sort_type: int = 14,
+        start: int = 0,
+        page_size: int = 80,
+        sort_order: int = 1,
+        include_raw: bool = False,
+    ) -> MacBoardMembersPage:
+        return self.mac.board_members(
+            board_symbol,
+            sort_type=sort_type,
+            start=start,
+            page_size=page_size,
+            sort_order=sort_order,
+            include_raw=include_raw,
+        )
+
+    def get_mac_board_members_quotes(
+        self,
+        board_symbol: str,
+        *,
+        sort_type: int = 14,
+        start: int = 0,
+        page_size: int = 80,
+        sort_order: int = 1,
+        include_raw: bool = False,
+    ) -> MacBoardMembersQuotesPage:
+        return self.mac.board_members_quotes(
+            board_symbol,
+            sort_type=sort_type,
+            start=start,
+            page_size=page_size,
+            sort_order=sort_order,
+            include_raw=include_raw,
+        )
+
+    def get_mac_board_members_quotes_dynamic(
+        self,
+        board_symbol: str,
+        *,
+        sort_type: int = 14,
+        start: int = 0,
+        page_size: int = 80,
+        sort_order: int = 1,
+        field_bitmap: bytes | None = None,
+        filter: int = 0,  # noqa: A002 - gotdx Filter 字段名
+        include_raw: bool = False,
+    ) -> MacBoardMembersDynamicPage:
+        return self.mac.board_members_quotes_dynamic(
+            board_symbol,
+            sort_type=sort_type,
+            start=start,
+            page_size=page_size,
+            sort_order=sort_order,
+            field_bitmap=field_bitmap,
+            filter=filter,
+            include_raw=include_raw,
+        )
+
+    def get_mac_transactions(
+        self,
+        code: str,
+        *,
+        start: int = 0,
+        count: int = 1000,
+        query_date: int = 0,
+        include_raw: bool = False,
+    ) -> MacTransactionsPage:
+        return self.mac.transactions(
+            code, start=start, count=count, query_date=query_date, include_raw=include_raw
+        )
+
+    def get_mac_tick_charts(
+        self,
+        code: str,
+        *,
+        query_date: int = 0,
+        days: int = 5,
+        include_raw: bool = False,
+    ) -> MacTickChartsPage:
+        return self.mac.tick_charts(
+            code, query_date=query_date, days=days, include_raw=include_raw
+        )
+
+    def get_mac_auction(
+        self,
+        code: str,
+        *,
+        start: int = 0,
+        count: int = 500,
+        include_raw: bool = False,
+    ) -> MacAuctionPage:
+        return self.mac.auction(code, start=start, count=count, include_raw=include_raw)
+
+    def get_mac_market_monitor(
+        self,
+        exchange,
+        *,
+        start: int = 0,
+        count: int = 600,
+        include_raw: bool = False,
+    ) -> MacMarketMonitorPage:
+        market = _normalize_market(exchange)
+        return self.mac.market_monitor(
+            market, start=start, count=count, include_raw=include_raw
+        )
+
+    def get_mac_kline_offset(self, *, offset: int = 0, count: int = 128000) -> MacKlineOffset:
+        return self.mac.kline_offset(offset=offset, count=count)
+
+    def get_mac_file_list(self, filename: str, *, offset: int = 0) -> MacFileListMeta:
+        return self.mac.file_list(filename, offset=offset)
+
+    def get_mac_file_download(
+        self,
+        filename: str,
+        *,
+        index: int = 1,
+        offset: int = 0,
+        size: int = 30000,
+    ) -> MacFileDownloadChunk:
+        return self.mac.file_download(filename, index=index, offset=offset, size=size)
 
 
 def _resolve_hosts(host: str | None, hosts: Sequence[str] | None) -> list[str]:

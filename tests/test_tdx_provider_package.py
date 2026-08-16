@@ -1221,16 +1221,22 @@ def test_tdx_provider_wire_command_codec_uses_lightweight_dispatch_facts() -> No
     assert "core_wire=False" in result.stdout
     assert "codec_builders_cached=False" in result.stdout
     assert "codec_parsers_cached=False" in result.stdout
-    assert "builder_count=21" in result.stdout
-    assert "parser_count=21" in result.stdout
+    # 计划 19 §4.1 P2：主站缺口 11 项中 8 项新注册，21→29；其余 3 项
+    # （quotes_encrypt/history_orders/historical_trades_with_trans）与已注册命令
+    # 同码同请求布局，落 N/A（等价性钉在 tests/test_tdx_main_gaps_wire.py）。
+    # 计划 19 §4.2 P2（Wave2-B）：MAC 余族 15 命令名 + file_meta 0x02C5 注册，
+    # 29→45 名；mac_symbol_belong_board 与 mac_capital_flow 同码 0x1218（双名
+    # 指向同一路由 builder/parser），码键 dict 去重后 builder/parser 各 44。
+    assert "builder_count=44" in result.stdout
+    assert "parser_count=44" in result.stdout
     assert "command_codes_after_tables=True" in result.stdout
     assert "command_dispatch_after_tables=True" in result.stdout
     assert "command_codes_export_cached_after_tables=False" in result.stdout
     assert "builder_targets_export_cached_after_tables=False" in result.stdout
     assert "parser_targets_export_cached_after_tables=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
-    assert "explicit_builder_targets=21" in result.stdout
-    assert "explicit_parser_targets=21" in result.stdout
+    assert "explicit_builder_targets=45" in result.stdout
+    assert "explicit_parser_targets=45" in result.stdout
 
 
 def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> None:
@@ -1278,8 +1284,9 @@ def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> N
     assert "core_wire=False" in result.stdout
     assert "codec_builders_cached=False" in result.stdout
     assert "codec_parsers_cached=False" in result.stdout
-    assert "builder_count=21" in result.stdout
-    assert "parser_count=21" in result.stdout
+    # Wave2-B 后：45 个注册名，0x1218 同码双名去重 → 44 个码键 builder/parser。
+    assert "builder_count=44" in result.stdout
+    assert "parser_count=44" in result.stdout
     assert "provider_command_codes_export_cached_after_tables=False" in result.stdout
     assert "provider_builder_targets_export_cached_after_tables=False" in result.stdout
     assert "provider_parser_targets_export_cached_after_tables=False" in result.stdout
@@ -2341,7 +2348,7 @@ def test_tdx_provider_wire_command_registry_root_import_is_lightweight() -> None
     assert "required_before_commands=heartbeat,handshake,security_list,security_count" in result.stdout
     assert "has_commands_after_required=False" in result.stdout
     assert "root_lookup_after_required=False" in result.stdout
-    assert "command_count=21" in result.stdout
+    assert "command_count=45" in result.stdout
     assert "command_codes_export_cached_after_commands=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
     assert "command_codes_export_cached_after_explicit=True" in result.stdout
@@ -2409,7 +2416,7 @@ def test_tdx_provider_wire_command_registry_compat_import_is_lazy() -> None:
     assert "command_code=0x53e" in result.stdout
     assert "command_codes_after_call=True" in result.stdout
     assert "metadata_after_call=False" in result.stdout
-    assert "command_count=21" in result.stdout
+    assert "command_count=45" in result.stdout
     assert "metadata_after_commands=True" in result.stdout
     assert "codec_after_commands=False" in result.stdout
     assert "core_wire=False" in result.stdout
@@ -2445,7 +2452,7 @@ def test_tdx_provider_wire_command_aggregates_use_root_registry() -> None:
     )
 
     assert "same=True" in result.stdout
-    assert "command_count=21" in result.stdout
+    assert "command_count=45" in result.stdout
     assert "registry_root=True" in result.stdout
     assert "legacy_registry=False" in result.stdout
     assert "commands_package=True" in result.stdout
@@ -5914,8 +5921,12 @@ def test_tdx_public_runtime_modules_are_provider_owned_or_compat_only() -> None:
     assert sorted(core_public - provider_public) == ["request.py"]
     assert sorted(provider_public - core_public) == [
         "adapter.py",
+        # 计划 19 P3：板块文件解析（block_zs 等 flat/groups）
+        "block_files.py",
         "catalog.py",
         "collectors.py",
+        # 计划 19 P2：ICFQS 查询方法层（题材明细/HQServ 三入口/hot cfg 族）
+        "icfqs_queries.py",
         # 计划 19 P1：ICFQS 题材族 fetch 模块（theme_members/theme_events）
         "icfqs_theme_fetch.py",
         "market_dates.py",
