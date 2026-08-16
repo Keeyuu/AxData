@@ -354,6 +354,207 @@ INDEX_CATALOG_FIELDS: tuple[Field, ...] = (
 )
 
 
+CAPITAL_FLOW_FIELDS: tuple[Field, ...] = (
+    Field(
+        "instrument_id",
+        "string",
+        nullable=False,
+        aliases=("ts_code",),
+        description="AxData instrument identifier, e.g. 000001.SZ.",
+        description_zh="AxData 统一证券代码，例如 000001.SZ。",
+    ),
+    Field(
+        "trade_date",
+        "string",
+        nullable=False,
+        description="Snapshot trade date in YYYYMMDD format.",
+        description_zh="快照交易日，格式为 YYYYMMDD。",
+    ),
+    Field(
+        "today_main_in",
+        "double",
+        description="TDX main-force inflow today (source vocabulary kept verbatim).",
+        description_zh="今日主力流入（通达信源口径，命名保持源词汇）。",
+    ),
+    Field(
+        "today_main_out",
+        "double",
+        description="TDX main-force outflow today.",
+        description_zh="今日主力流出（通达信源口径）。",
+    ),
+    Field(
+        "today_retail_in",
+        "double",
+        description="TDX retail inflow today.",
+        description_zh="今日散户流入（通达信源口径）。",
+    ),
+    Field(
+        "today_retail_out",
+        "double",
+        description="TDX retail outflow today.",
+        description_zh="今日散户流出（通达信源口径）。",
+    ),
+    Field(
+        "today_main_net",
+        "double",
+        description="TDX main-force net today (in - out).",
+        description_zh="今日主力净额（入-出）。",
+    ),
+    Field(
+        "today_retail_net",
+        "double",
+        description="TDX retail net today (in - out).",
+        description_zh="今日散户净额（入-出）。",
+    ),
+    Field(
+        "five_day_main_buy",
+        "double",
+        description="TDX 5-day main-force buy.",
+        description_zh="五日主力买入（通达信源口径）。",
+    ),
+    Field(
+        "five_day_main_sell",
+        "double",
+        description="TDX 5-day main-force sell.",
+        description_zh="五日主力卖出（通达信源口径）。",
+    ),
+    Field(
+        "five_day_super_net",
+        "double",
+        description="TDX 5-day super-large order net.",
+        description_zh="五日超大单净额（通达信源口径）。",
+    ),
+    Field(
+        "five_day_large_net",
+        "double",
+        description="TDX 5-day large order net.",
+        description_zh="五日大单净额（通达信源口径）。",
+    ),
+    Field(
+        "five_day_medium_net",
+        "double",
+        description="TDX 5-day medium order net.",
+        description_zh="五日中单净额（通达信源口径）。",
+    ),
+    Field(
+        "five_day_small_net",
+        "double",
+        description="TDX 5-day small order net.",
+        description_zh="五日小单净额（通达信源口径）。",
+    ),
+    Field(
+        "five_day_main_net",
+        "double",
+        description="TDX 5-day main-force net (buy - sell).",
+        description_zh="五日主力净额（买-卖）。",
+    ),
+)
+
+THEME_MEMBERS_FIELDS: tuple[Field, ...] = (
+    Field(
+        "theme_code",
+        "string",
+        nullable=False,
+        description="ICFQS theme code; 880-series use setcode 2, numeric themes use 1.",
+        description_zh="题材代码；880 系 setcode=2，数字新题材 setcode=1。",
+    ),
+    Field(
+        "setcode",
+        "string",
+        nullable=False,
+        description="Theme code space; PK includes it because 880 and numeric codes may collide.",
+        description_zh="题材代码空间；880 系与数字系可能重码，故入主键。",
+    ),
+    Field(
+        "instrument_id",
+        "string",
+        nullable=False,
+        description="AxData instrument identifier of the member stock.",
+        description_zh="成分股 AxData 统一证券代码。",
+    ),
+    Field(
+        "as_of_date",
+        "string",
+        nullable=False,
+        description="PIT snapshot trade date in YYYYMMDD (trade calendar day, not wall clock).",
+        description_zh="PIT 留痕交易日（交易日历日，非自然日），格式 YYYYMMDD。",
+    ),
+    Field(
+        "instrument_name",
+        "string",
+        description="Member stock display name at snapshot time.",
+        description_zh="快照时成分股名称。",
+    ),
+    Field(
+        "symbol",
+        "string",
+        description="Plain symbol without exchange suffix, e.g. 000001.",
+        description_zh="不带交易所后缀的代码，例如 000001。",
+    ),
+    Field(
+        "exchange",
+        "string",
+        description="Exchange code: SSE / SZSE / BSE.",
+        description_zh="交易所代码：SSE / SZSE / BSE。",
+    ),
+    Field(
+        "join_reason",
+        "string",
+        description="ICFQS join-reason text.",
+        description_zh="ICFQS 入选理由文本。",
+    ),
+    Field(
+        "join_date",
+        "string",
+        description="ICFQS join date (YYYY-MM-DD as served).",
+        description_zh="ICFQS 入选日期（源格式 YYYY-MM-DD）。",
+    ),
+)
+
+THEME_EVENTS_FIELDS: tuple[Field, ...] = (
+    Field(
+        "theme_code",
+        "string",
+        nullable=False,
+        description="ICFQS theme code.",
+        description_zh="题材代码。",
+    ),
+    Field(
+        "event_date",
+        "string",
+        nullable=False,
+        description="Theme event date in YYYYMMDD format.",
+        description_zh="题材事件日期，格式 YYYYMMDD。",
+    ),
+    Field(
+        "as_of_date",
+        "string",
+        nullable=False,
+        description="PIT snapshot trade date in YYYYMMDD.",
+        description_zh="PIT 留痕交易日，格式 YYYYMMDD。",
+    ),
+    Field("theme_name", "string", description="Theme display name.", description_zh="题材名称。"),
+    Field(
+        "event_text",
+        "string",
+        description="Theme event description text.",
+        description_zh="题材事件描述文本。",
+    ),
+    Field(
+        "member_codes",
+        "string",
+        description="Raw member list as served (e.g. '0_300243,1_688598').",
+        description_zh="成分代码原样串（如 '0_300243,1_688598'）。",
+    ),
+    Field(
+        "change_pct",
+        "double",
+        description="Theme change percent served with the event row.",
+        description_zh="随事件行返回的题材涨跌幅。",
+    ),
+)
+
+
 SCHEMAS: dict[str, TableSchema] = {
     "stock_basic_exchange": TableSchema(
         name="stock_basic_exchange",
@@ -477,6 +678,33 @@ SCHEMAS: dict[str, TableSchema] = {
         display_name_zh="指数目录（含板块/题材）",
         interface_group="本地数据/指数/基础资料",
         fields=INDEX_CATALOG_FIELDS,
+    ),
+    "capital_flow": TableSchema(
+        name="capital_flow",
+        primary_key=("instrument_id", "trade_date"),
+        date_field="trade_date",
+        description="TDX MAC capital-flow daily snapshot (today + 5-day buckets, plan 19).",
+        display_name_zh="个股资金流（每日留痕）",
+        interface_group="本地数据/股票/资金流",
+        fields=CAPITAL_FLOW_FIELDS,
+    ),
+    "theme_members": TableSchema(
+        name="theme_members",
+        primary_key=("theme_code", "setcode", "instrument_id", "as_of_date"),
+        date_field="as_of_date",
+        description="ICFQS theme constituents PIT snapshot with join reason and date (plan 19).",
+        display_name_zh="题材成分（PIT 留痕）",
+        interface_group="本地数据/题材/成分",
+        fields=THEME_MEMBERS_FIELDS,
+    ),
+    "theme_events": TableSchema(
+        name="theme_events",
+        primary_key=("theme_code", "event_date", "as_of_date"),
+        date_field="as_of_date",
+        description="ICFQS theme event calendar snapshot (plan 19).",
+        display_name_zh="题材事件日历（留痕）",
+        interface_group="本地数据/题材/事件",
+        fields=THEME_EVENTS_FIELDS,
     ),
 }
 

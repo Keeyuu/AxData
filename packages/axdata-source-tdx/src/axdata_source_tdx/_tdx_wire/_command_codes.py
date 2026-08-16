@@ -23,6 +23,7 @@ COMMAND_CODE_ITEMS: tuple[tuple[str, int], ...] = (
     ("today_trades", 0x0FC5),
     ("historical_trades", 0x0FC6),
     ("recent_historical_intraday", 0x0FEB),
+    ("mac_capital_flow", 0x1218),
 )
 
 _TYPE_EXPORTS = {

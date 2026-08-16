@@ -44,12 +44,18 @@ class RequestFrame:
     msg_type: int
     data: bytes = b""
     control: int = CONTROL_DEFAULT
+    head: int = PREFIX
 
     def to_bytes(self) -> bytes:
         import struct
 
         length = len(self.data) + 2
-        return struct.pack("<BIBHHH", PREFIX, self.msg_id, self.control, length, length, self.msg_type) + self.data
+        return (
+            struct.pack(
+                "<BIBHHH", self.head, self.msg_id, self.control, length, length, self.msg_type
+            )
+            + self.data
+        )
 
 
 @dataclass(frozen=True, slots=True)

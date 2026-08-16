@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from axdata_core.source_errors import SourceUnavailableError
@@ -238,6 +239,185 @@ def request_stock_suspensions(
         emit_source_progress=emit_source_progress,
         progress_callback=adapter._progress_callback,
     )
+    return adapter._finish_request_result(client, result)
+
+
+CAPITAL_FLOW_ROW_FIELDS: tuple[str, ...] = (
+    "full_code",
+    "market",
+    "today_main_in",
+    "today_main_out",
+    "today_retail_in",
+    "today_retail_out",
+    "today_main_net",
+    "today_retail_net",
+    "five_day_main_buy",
+    "five_day_main_sell",
+    "five_day_super_net",
+    "five_day_large_net",
+    "five_day_medium_net",
+    "five_day_small_net",
+    "five_day_main_net",
+)
+"""MAC 0x1218 snapshot fields copied verbatim (snake, source vocabulary)."""
+
+
+@dataclass(frozen=True)
+class CapitalFlowResult:
+    rows: list[dict[str, Any]]
+    meta: dict[str, Any]
+
+
+def capital_flow_row(
+    stock_row: Mapping[str, Any],
+    snapshot: Any,
+    trade_date: str,
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "instrument_id": stock_row.get("instrument_id"),
+        "trade_date": trade_date,
+    }
+    for field in CAPITAL_FLOW_ROW_FIELDS:
+        row[field] = getattr(snapshot, field)
+    return row
+
+
+def capital_flow_trade_date(params: Mapping[str, Any]) -> str:
+    """Return the snapshot trade date: explicit param override, else today (Asia/Shanghai)."""
+
+    from datetime import datetime
+
+    raw = params.get("trade_date") or params.get("data_date")
+    if raw:
+        digits = "".join(ch for ch in str(raw).strip() if ch.isdigit())
+        if len(digits) >= 8:
+            return digits[:8]
+    from .tdx_server_config import LOCAL_TIMEZONE
+
+    return datetime.now(LOCAL_TIMEZONE).strftime("%Y%m%d")
+
+
+def request_stock_capital_flow(
+    adapter: Any,
+    client: Any,
+    params: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Scan the stock universe on the quote client, then fetch MAC 0x1218 per code.
+
+    The code table follows the suspension scan path; capital-flow snapshots run
+    on a dedicated MAC host group (single serial connection by default).
+    """
+
+    from time import monotonic
+
+    from .execution_utils import emit_source_progress, tdx_client_meta
+    from .host_config import configured_tdx_mac_hosts
+    from .options import tdx_request_option_hosts, tdx_request_option_pool_size
+    from .status_fetch import current_checked_at, stock_status_stock_params
+
+    stock_rows = adapter._request_stock_codes(
+        client,
+        stock_status_stock_params(params),
+        progress_start=20,
+        progress_span=8,
+    )
+    emit_source_progress(
+        adapter._progress_callback,
+        30,
+        f"已准备股票池，共 {len(stock_rows)} 只",
+        progress_current=0,
+        progress_total=len(stock_rows),
+        progress_unit="只",
+        eta_ms=None,
+    )
+
+    trade_date = capital_flow_trade_date(params)
+    mac_hosts = configured_tdx_mac_hosts()
+    hosts = (
+        tdx_request_option_hosts(adapter._options, configured_hosts=lambda _options: mac_hosts)
+        or mac_hosts
+    )
+    pool_size = tdx_request_option_pool_size(adapter._options)
+    mac_client = create_tdx_client(hosts=hosts, pool_size=pool_size)
+
+    snapshots: list[tuple[Mapping[str, Any], Any]] = []
+    failures: list[dict[str, str]] = []
+    started_at = monotonic()
+    try:
+        if hasattr(mac_client, "connect"):
+            mac_client.connect()
+        for index, stock_row in enumerate(stock_rows, start=1):
+            tdx_code = str(stock_row.get("tdx_code") or "").strip()
+            if not tdx_code:
+                failures.append({"tdx_code": "", "error": "missing tdx_code"})
+                continue
+            try:
+                snapshot = mac_client.mac.capital_flow(tdx_code)
+            except Exception as exc:
+                failures.append({"tdx_code": tdx_code, "error": str(exc) or type(exc).__name__})
+                continue
+            snapshots.append((stock_row, snapshot))
+            if index % 200 == 0 or index == len(stock_rows):
+                emit_source_progress(
+                    adapter._progress_callback,
+                    30 + int(36 * index / max(1, len(stock_rows))),
+                    f"已采集资金流 {len(snapshots)} 只",
+                    progress_current=index,
+                    progress_total=len(stock_rows),
+                    progress_unit="只",
+                    eta_ms=None,
+                )
+        mac_meta = tdx_client_meta(mac_client)
+    finally:
+        if hasattr(mac_client, "close"):
+            mac_client.close()
+
+    if not snapshots and failures:
+        raise SourceUnavailableError(
+            f"TDX MAC capital flow failed for all {len(failures)} requested codes; "
+            f"last error: {failures[-1]['error']}"
+        )
+
+    rows = [capital_flow_row(stock_row, snapshot, trade_date) for stock_row, snapshot in snapshots]
+    result = CapitalFlowResult(
+        rows=rows,
+        meta={
+            "tdx_capital_flow_source": "tdx_0x1218",
+            "tdx_capital_flow_source_host": mac_meta.get("tdx_connected_host"),
+            "tdx_capital_flow_hosts": list(hosts),
+            "tdx_scanned_count": len(stock_rows),
+            "tdx_capital_flow_count": len(rows),
+            "tdx_capital_flow_failed_count": len(failures),
+            "tdx_capital_flow_elapsed_ms": max(0, int((monotonic() - started_at) * 1000)),
+            "trade_date": trade_date,
+            "checked_at": current_checked_at(),
+        },
+    )
+    return adapter._finish_request_result(client, result)
+
+
+def request_stock_theme_members(
+    adapter: Any,
+    client: Any,
+    params: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    from .icfqs_theme_fetch import stock_theme_members_request_result
+
+    result = stock_theme_members_request_result(
+        params,
+        progress_callback=adapter._progress_callback,
+    )
+    return adapter._finish_request_result(client, result)
+
+
+def request_stock_theme_events(
+    adapter: Any,
+    client: Any,
+    params: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    from .icfqs_theme_fetch import stock_theme_events_request_result
+
+    result = stock_theme_events_request_result(params)
     return adapter._finish_request_result(client, result)
 
 

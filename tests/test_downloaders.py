@@ -18,6 +18,7 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
+    "stock_capital_flow_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
     "stock_kline_minute_tdx",
@@ -26,6 +27,9 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_adj_factor_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
+    # 计划 19 P1：ICFQS 题材族两个采集接口（与 capital_flow 一并注册）
+    "stock_theme_members_tdx",
+    "stock_theme_events_tdx",
 ]
 BUILTIN_GENERIC_INTERFACE_NAMES = {
     "stock_trade_calendar_exchange",

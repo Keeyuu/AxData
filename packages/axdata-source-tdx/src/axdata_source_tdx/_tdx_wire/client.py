@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from .api.corporate import CorporateApi
     from .api.finance import FinanceApi
     from .api.intraday import IntradayApi
+    from .api.mac import MacApi
     from .api.quotes import QuoteApi
     from .api.resources import ResourceApi
     from .api.session import SessionApi
@@ -66,6 +67,7 @@ class TdxClient:
     _quotes: QuoteApi | None = field(default=None, init=False, repr=False)
     _resources: ResourceApi | None = field(default=None, init=False, repr=False)
     _trades: TradeApi | None = field(default=None, init=False, repr=False)
+    _mac: MacApi | None = field(default=None, init=False, repr=False)
     _code_count_cache: dict[str, int] = field(init=False, repr=False)
     _codes_all_cache: dict[str, list[SecurityCode]] = field(init=False, repr=False)
 
@@ -145,6 +147,14 @@ class TdxClient:
     @auction.setter
     def auction(self, value: AuctionApi) -> None:
         self._auction = value
+
+    @property
+    def mac(self) -> MacApi:
+        return self._api("_mac", "api.mac", "MacApi")
+
+    @mac.setter
+    def mac(self, value: MacApi) -> None:
+        self._mac = value
 
     @property
     def session(self) -> SessionApi:

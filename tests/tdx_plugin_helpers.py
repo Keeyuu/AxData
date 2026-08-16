@@ -17,12 +17,16 @@ TDX_COLLECTOR_RUNNER_ENTRY = "axdata_source_tdx.collectors:run_tdx_collector"
 TDX_BASE_COLLECTOR_DATASET_IDS = {
     "tdx.stock_codes_tdx.snapshot": "tdx.stock_codes",
     "tdx.stock_suspensions_tdx.snapshot": "tdx.stock_suspensions",
+    "tdx.stock_capital_flow_tdx.snapshot": "tdx.stock_capital_flow",
     "tdx.stock_st_list_tdx.snapshot": "tdx.stock_st_list",
     "tdx.stock_daily_share_tdx.snapshot": "tdx.stock_daily_share",
     "tdx.stock_kline_daily_tdx.snapshot": "tdx.stock_daily",
     "tdx.stock_kline_minute_tdx.snapshot": "tdx.stock_minute",
     "tdx.stock_limit_ladder_tdx.snapshot": "tdx.stock_limit_ladder",
     "tdx.stock_theme_strength_rank_tdx.snapshot": "tdx.stock_theme_strength_rank",
+    # 计划 19 P1：ICFQS 题材族两个采集器
+    "tdx.stock_theme_members_tdx.snapshot": "tdx.stock_theme_members",
+    "tdx.stock_theme_events_tdx.snapshot": "tdx.stock_theme_events",
     "tdx.index_kline_tdx.snapshot": "tdx.index_daily",
     "tdx.index_codes_tdx.snapshot": "tdx.index_catalog",
 }

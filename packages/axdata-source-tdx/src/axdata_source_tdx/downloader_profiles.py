@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .request_methods import CAPITAL_FLOW_ROW_FIELDS
+
 
 def _tdx_output_path_parts(interface_name: str) -> list[str]:
     return ["通达信", "股票数据", _tdx_interface_group_path(interface_name), interface_name]
@@ -212,6 +214,36 @@ def tdx_downloader_profiles(
         description="这个接口会先扫描股票池，再逐只请求股本变迁事件；实测默认使用当前最快的 8 个普通行情服务器，每个服务器 2 条长连接，采集完成后会自动断开连接。",
     )
 
+    tdx_capital_flow_concurrency = concurrency_profile_cls(
+        mode="fixed",
+        mode_editable=False,
+        default_source_server_count=1,
+        source_server_count_editable=False,
+        max_source_server_count=1,
+        default_connections_per_server=2,
+        connections_per_server_editable=False,
+        max_connections_per_server=2,
+        default_max_concurrent_tasks=2,
+        max_concurrent_tasks_editable=False,
+        max_max_concurrent_tasks=2,
+        default_batch_size=1,
+        batch_size_editable=False,
+        max_batch_size=1,
+        default_request_interval_ms=0,
+        min_request_interval_ms=0,
+        max_request_interval_ms=0,
+        default_retry_count=0,
+        max_retry_count=0,
+        default_timeout_ms=30000,
+        min_timeout_ms=30000,
+        max_timeout_ms=30000,
+        description=(
+            "这个接口先扫描股票池，再在 MAC 行情服务器上逐只请求资金流快照；"
+            "默认单服务器 2 条长连接串行请求（5542 只 × 约 37ms ≈ 3.5 分钟），"
+            "采集完成后会自动断开连接。"
+        ),
+    )
+
     tdx_limit_ladder_concurrency = concurrency_profile_cls(
         mode="fixed",
         mode_editable=False,
@@ -236,6 +268,35 @@ def tdx_downloader_profiles(
         min_timeout_ms=30000,
         max_timeout_ms=30000,
         description="主体天梯列表一次可取，普通行情保持单连接；题材补全会在接口内部先用 6 个 F10 题材查询 worker，若首轮有题材为空的股票，再用 6 个 worker 补漏 1 轮，采集完成后会自动断开连接。",
+    )
+
+    tdx_icfqs_theme_concurrency = concurrency_profile_cls(
+        mode="fixed",
+        mode_editable=False,
+        default_source_server_count=1,
+        source_server_count_editable=False,
+        max_source_server_count=1,
+        default_connections_per_server=1,
+        connections_per_server_editable=False,
+        max_connections_per_server=1,
+        default_max_concurrent_tasks=1,
+        max_concurrent_tasks_editable=False,
+        max_max_concurrent_tasks=1,
+        default_batch_size=1,
+        batch_size_editable=False,
+        max_batch_size=1,
+        default_request_interval_ms=0,
+        min_request_interval_ms=0,
+        max_request_interval_ms=0,
+        default_retry_count=0,
+        max_retry_count=0,
+        default_timeout_ms=30000,
+        min_timeout_ms=30000,
+        max_timeout_ms=30000,
+        description=(
+            "ICFQS 题材族走独立 HTTP 网关顺序翻页（topic_list/topic_stocks/events），"
+            "不占用 TDX 行情连接；采集完成后自动结束。"
+        ),
     )
 
     def full_snapshot_profile(
@@ -382,6 +443,61 @@ def tdx_downloader_profiles(
                 ["category", "integer/string/list", "否", "事件类别：可选；常用 1/xdxr 除权除息、5/equity 股本变化、15/restructure 重整调整"],
             ],
             description="自动取股票池并逐只拉取股本变迁事件；不填 code 时按股票范围拉取全量。category 可选，用来只保存除权除息等某一类事件。",
+        )
+
+    def capital_flow_profile() -> Any:
+        return downloader_profile_cls(
+            interface_name="stock_capital_flow_tdx",
+            display_name="个股资金流",
+            downloader_type="full_snapshot",
+            default_params={"scope": "all"},
+            default_fields=[
+                "instrument_id",
+                "trade_date",
+                *CAPITAL_FLOW_ROW_FIELDS,
+            ],
+            output_layer="core",
+            output_format="parquet",
+            supported_formats=["parquet", "csv", "jsonl"],
+            default_connection_mode="long_connection",
+            concurrency=tdx_capital_flow_concurrency,
+            primary_key=("instrument_id", "trade_date"),
+            resource_group="tdx.quote",
+            adapter_factory="tdx",
+            runtime_source_server_max_factory="tdx",
+            default_output_path_parts=_core_table_output_path_parts("capital_flow"),
+            snapshot_date_meta_keys=["trade_date", "data_date", "snapshot_date", "date"],
+            file_stem_template="{interface_name}_{snapshot_date}",
+            write_mode="snapshot",
+            partition_by=["trade_date"],
+            required_columns=["instrument_id", "trade_date"],
+            expected_columns=[
+                "instrument_id",
+                "trade_date",
+                *CAPITAL_FLOW_ROW_FIELDS,
+            ],
+            date_field="trade_date",
+            params=[
+                [
+                    "scope",
+                    "string/list",
+                    "否",
+                    "股票范围：all 全部、main 主板、star 科创板、chinext 创业板、"
+                    "bse 北交所、cdr CDR；默认 all",
+                ],
+                ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"],
+                [
+                    "trade_date",
+                    "string",
+                    "否",
+                    "快照交易日 YYYYMMDD；默认当日，仅作为落表分区与文件名，不回溯历史",
+                ],
+            ],
+            description=(
+                "自动取股票池并在 MAC 行情服务器逐只请求当日/五日资金流快照（0x1218），"
+                "写入 core 层 capital_flow 表；主力的 main/retail 口径与超大/大/中/小单分组均为"
+                "通达信服务端黑箱定义。当日重跑按 trade_date 幂等覆盖。"
+            ),
         )
 
     def daily_kline_profile() -> Any:
@@ -820,6 +936,136 @@ def tdx_downloader_profiles(
             description="保存当前题材强度排行快照；默认主板完整排行，复用连板天梯涨停池口径，只统计当前封住涨停且剔除 ST / *ST 的股票。",
         )
 
+    def theme_members_profile() -> Any:
+        return downloader_profile_cls(
+            interface_name="stock_theme_members_tdx",
+            display_name="题材成分（PIT）",
+            downloader_type="full_snapshot",
+            default_params={"category": "", "setcode": ""},
+            default_fields=[
+                "theme_code",
+                "setcode",
+                "instrument_id",
+                "symbol",
+                "exchange",
+                "instrument_name",
+                "join_reason",
+                "join_date",
+                "as_of_date",
+            ],
+            output_layer="core",
+            output_format="parquet",
+            supported_formats=["parquet", "csv", "jsonl"],
+            default_connection_mode="long_connection",
+            concurrency=tdx_icfqs_theme_concurrency,
+            primary_key=("theme_code", "setcode", "instrument_id", "as_of_date"),
+            resource_group="tdx.f10",
+            adapter_factory="tdx",
+            runtime_source_server_max_factory="tdx",
+            default_output_path_parts=_core_table_output_path_parts("theme_members"),
+            snapshot_date_meta_keys=["as_of_date", "data_date", "trade_date", "date"],
+            file_stem_template="{interface_name}_{snapshot_date}",
+            write_mode="snapshot",
+            partition_by=["as_of_date"],
+            required_columns=["theme_code", "setcode", "instrument_id", "as_of_date"],
+            expected_columns=[
+                "theme_code",
+                "setcode",
+                "instrument_id",
+                "symbol",
+                "exchange",
+                "instrument_name",
+                "join_reason",
+                "join_date",
+                "as_of_date",
+            ],
+            date_field="as_of_date",
+            params=[
+                [
+                    "category",
+                    "string",
+                    "否",
+                    "topic_list 入口的题材分类位；默认 1（真机抓包口径），"
+                    "与 setcode 拼成 category|setcode",
+                ],
+                [
+                    "setcode",
+                    "string",
+                    "否",
+                    "topic_list 入口的市场位；默认 1；"
+                    "成分行的真实市场位以行内 setcode/代码前缀为准",
+                ],
+                [
+                    "as_of_date",
+                    "string",
+                    "否",
+                    "PIT 快照日 YYYYMMDD；默认当日，可显式传值用于补采；当日重跑幂等覆盖",
+                ],
+            ],
+            description=(
+                "经 ICFQS 题材族 HTTP 网关遍历全部题材（topic_list 翻页到空页），"
+                "再对每个题材翻页拉取成分（topic_stocks size=100 到空页），"
+                "写入 core 层 theme_members 表（按 as_of_date 分区）。"
+                "题材成分以入选日 join_date 留痕，构成 PIT 口径的成分快照。"
+            ),
+        )
+
+    def theme_events_profile() -> Any:
+        return downloader_profile_cls(
+            interface_name="stock_theme_events_tdx",
+            display_name="题材事件日历",
+            downloader_type="full_snapshot",
+            default_params={"count": 100},
+            default_fields=[
+                "theme_code",
+                "theme_name",
+                "event_date",
+                "event_text",
+                "member_codes",
+                "change_pct",
+                "as_of_date",
+            ],
+            output_layer="core",
+            output_format="parquet",
+            supported_formats=["parquet", "csv", "jsonl"],
+            default_connection_mode="long_connection",
+            concurrency=tdx_icfqs_theme_concurrency,
+            primary_key=("theme_code", "event_date", "as_of_date"),
+            resource_group="tdx.f10",
+            adapter_factory="tdx",
+            runtime_source_server_max_factory="tdx",
+            default_output_path_parts=_core_table_output_path_parts("theme_events"),
+            snapshot_date_meta_keys=["as_of_date", "data_date", "trade_date", "date"],
+            file_stem_template="{interface_name}_{snapshot_date}",
+            write_mode="snapshot",
+            partition_by=["as_of_date"],
+            required_columns=["theme_code", "event_date", "as_of_date"],
+            expected_columns=[
+                "theme_code",
+                "theme_name",
+                "event_date",
+                "event_text",
+                "member_codes",
+                "change_pct",
+                "as_of_date",
+            ],
+            date_field="as_of_date",
+            params=[
+                ["count", "integer", "否", "拉取近 N 条事件；默认 100，最大 1000"],
+                [
+                    "as_of_date",
+                    "string",
+                    "否",
+                    "快照日 YYYYMMDD；默认当日，可显式传值用于补采；当日重跑幂等覆盖",
+                ],
+            ],
+            description=(
+                "经 ICFQS 题材族 HTTP 网关拉取题材计划/纪念日历（events 近 N 条），"
+                "写入 core 层 theme_events 表（按 as_of_date 分区）。"
+                "member_codes 保留网关原始市场位串（如 0_300243,1_688598）。"
+            ),
+        )
+
     return {
         "stock_codes_tdx": full_snapshot_profile(
             "stock_codes_tdx",
@@ -840,6 +1086,7 @@ def tdx_downloader_profiles(
             concurrency=tdx_stock_codes_concurrency,
         ),
         "stock_daily_share_tdx": daily_share_profile(),
+        "stock_capital_flow_tdx": capital_flow_profile(),
         "stock_capital_changes_tdx": capital_changes_profile(),
         "stock_kline_daily_tdx": daily_kline_profile(),
         "stock_kline_minute_tdx": minute_kline_profile(),
@@ -848,4 +1095,6 @@ def tdx_downloader_profiles(
         "stock_adj_factor_tdx": adj_factor_profile(),
         "stock_limit_ladder_tdx": limit_ladder_profile(),
         "stock_theme_strength_rank_tdx": theme_strength_rank_profile(),
+        "stock_theme_members_tdx": theme_members_profile(),
+        "stock_theme_events_tdx": theme_events_profile(),
     }

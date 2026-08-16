@@ -563,12 +563,16 @@ def test_tdx_plugin_provider_exposes_collection_profiles_in_manifest() -> None:
         "stock_suspensions_tdx",
         "stock_st_list_tdx",
         "stock_daily_share_tdx",
+        # 计划 19 P1：MAC 资金流 + ICFQS 题材族采集接口
+        "stock_capital_flow_tdx",
         "stock_capital_changes_tdx",
         "stock_kline_daily_tdx",
         "stock_kline_minute_tdx",
         "stock_adj_factor_tdx",
         "stock_limit_ladder_tdx",
         "stock_theme_strength_rank_tdx",
+        "stock_theme_members_tdx",
+        "stock_theme_events_tdx",
         "index_kline_tdx",
         "index_codes_tdx",
     }
@@ -667,8 +671,9 @@ def test_tdx_plugin_provider_projection_does_not_load_downloader_runtime() -> No
     scenario = _tdx_plugin_projection_results()["tdx_plugin_provider_projection_does_not_load_downloader_runtime"]
     assert scenario["exit_code"] == 0
     assert scenario["provider_id"] == TDX_PROVIDER_ID
-    assert scenario["interfaces"] == 90
-    assert scenario["downloaders"] == 12
+    # 计划 19 P1 后 provider.json manifest 口径 93 接口 / 15 downloader
+    assert scenario["interfaces"] == 93
+    assert scenario["downloaders"] == 15
     assert scenario["collectors"] == 0
     assert "axdata_core.sources.tdx.catalog" not in scenario["loaded"]
     assert "axdata_core.tdx_f10_catalog" not in scenario["loaded"]

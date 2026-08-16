@@ -21,6 +21,7 @@ BUILDER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str]], ...] = (
     ("today_trades", ("trades", "build_today_trades_frame")),
     ("historical_trades", ("trades", "build_historical_trades_frame")),
     ("recent_historical_intraday", ("intraday", "build_recent_historical_intraday_frame")),
+    ("mac_capital_flow", ("mac_capital_flow", "build_mac_capital_flow_frame")),
 )
 
 PARSER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str, bool]], ...] = (
@@ -44,6 +45,7 @@ PARSER_TARGET_ITEMS: tuple[tuple[str, tuple[str, str, bool]], ...] = (
     ("today_trades", ("trades", "parse_today_trades_payload", True)),
     ("historical_trades", ("trades", "parse_historical_trades_payload", True)),
     ("recent_historical_intraday", ("intraday", "parse_recent_historical_intraday_payload", True)),
+    ("mac_capital_flow", ("mac_capital_flow", "parse_mac_capital_flow_payload", True)),
 )
 
 

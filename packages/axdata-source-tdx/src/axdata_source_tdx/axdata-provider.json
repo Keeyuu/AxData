@@ -5031,6 +5031,314 @@
       "params_example_zh": "# 默认扫描全市场当前停牌\nclient.call(\"stock_suspensions_tdx\")\n\n# 调试指定股票\nclient.call(\"stock_suspensions_tdx\", code=[\"000004.SZ\", \"600717.SH\"])"
     },
     {
+      "name": "stock_capital_flow_tdx",
+      "display_name_zh": "个股资金流",
+      "source_code": "tdx",
+      "source_name_zh": "通达信",
+      "category": "基础数据",
+      "menu_path": [
+        "通达信",
+        "股票数据",
+        "基础数据"
+      ],
+      "asset_class": "stock",
+      "request_mode": "source_request",
+      "collection": {
+        "supported": true,
+        "default_profile": "stock_capital_flow_tdx.snapshot"
+      },
+      "parameters": [
+        {
+          "name": "scope",
+          "display_name_zh": "股票范围：默认 all 全市场；可传 main、star、chinext、bse、cdr 用于调试缩小范围。",
+          "type": "string",
+          "required": false,
+          "multiple": true,
+          "default": "all",
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "股票范围：默认 all 全市场；可传 main、star、chinext、bse、cdr 用于调试缩小范围。"
+        },
+        {
+          "name": "code",
+          "display_name_zh": "调试用股票代码过滤：支持 000001、000001.SZ、sz000001。",
+          "type": "string",
+          "required": false,
+          "multiple": true,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "调试用股票代码过滤：支持 000001、000001.SZ、sz000001。"
+        },
+        {
+          "name": "trade_date",
+          "display_name_zh": "快照交易日 YYYYMMDD；默认当日，仅作为落表分区与文件名，不回溯历史。",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "快照交易日 YYYYMMDD；默认当日，仅作为落表分区与文件名，不回溯历史。"
+        }
+      ],
+      "fields": [
+        {
+          "name": "instrument_id",
+          "display_name_zh": "AxData 统一证券代码，例如 000001.SZ。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "AxData 统一证券代码，例如 000001.SZ。"
+        },
+        {
+          "name": "trade_date",
+          "display_name_zh": "快照交易日 YYYYMMDD。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "快照交易日 YYYYMMDD。"
+        },
+        {
+          "name": "full_code",
+          "display_name_zh": "TDX 带市场前缀代码，例如 sz000001。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "TDX 带市场前缀代码，例如 sz000001。"
+        },
+        {
+          "name": "market",
+          "display_name_zh": "TDX 市场编号：0 深圳、1 上海。",
+          "type": "integer",
+          "required": false,
+          "unit": null,
+          "description": "TDX 市场编号：0 深圳、1 上海。"
+        },
+        {
+          "name": "today_main_in",
+          "display_name_zh": "当日主力流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日主力流入（元）。"
+        },
+        {
+          "name": "today_main_out",
+          "display_name_zh": "当日主力流出（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日主力流出（元）。"
+        },
+        {
+          "name": "today_retail_in",
+          "display_name_zh": "当日散户流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日散户流入（元）。"
+        },
+        {
+          "name": "today_retail_out",
+          "display_name_zh": "当日散户流出（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日散户流出（元）。"
+        },
+        {
+          "name": "today_main_net",
+          "display_name_zh": "当日主力净流入（元），today_main_in - today_main_out。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日主力净流入（元），today_main_in - today_main_out。"
+        },
+        {
+          "name": "today_retail_net",
+          "display_name_zh": "当日散户净流入（元），today_retail_in - today_retail_out。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "当日散户净流入（元），today_retail_in - today_retail_out。"
+        },
+        {
+          "name": "five_day_main_buy",
+          "display_name_zh": "五日主力买入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日主力买入（元）。"
+        },
+        {
+          "name": "five_day_main_sell",
+          "display_name_zh": "五日主力卖出（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日主力卖出（元）。"
+        },
+        {
+          "name": "five_day_super_net",
+          "display_name_zh": "五日超大单净流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日超大单净流入（元）。"
+        },
+        {
+          "name": "five_day_large_net",
+          "display_name_zh": "五日大单净流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日大单净流入（元）。"
+        },
+        {
+          "name": "five_day_medium_net",
+          "display_name_zh": "五日中单净流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日中单净流入（元）。"
+        },
+        {
+          "name": "five_day_small_net",
+          "display_name_zh": "五日小单净流入（元）。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日小单净流入（元）。"
+        },
+        {
+          "name": "five_day_main_net",
+          "display_name_zh": "五日主力净流入（元），five_day_main_buy - five_day_main_sell。",
+          "type": "number",
+          "required": false,
+          "unit": "元",
+          "description": "五日主力净流入（元），five_day_main_buy - five_day_main_sell。"
+        }
+      ],
+      "examples": [
+        {
+          "title": "个股资金流",
+          "request": {
+            "interface_name": "stock_capital_flow_tdx",
+            "params": {
+              "scope": "all"
+            }
+          },
+          "response": {
+            "data": [
+              {
+                "instrument_id": "000001.SZ",
+                "trade_date": "20260816",
+                "full_code": "sz000001",
+                "market": 0,
+                "today_main_in": 320706176.0,
+                "today_main_out": 373999296.0,
+                "today_retail_in": 608355072.0,
+                "today_retail_out": 555062016.0,
+                "today_main_net": -53293120.0,
+                "today_retail_net": 53293056.0,
+                "five_day_main_buy": 1986570752.0,
+                "five_day_main_sell": 2257087744.0,
+                "five_day_super_net": 31367040.0,
+                "five_day_large_net": -91887392.0,
+                "five_day_medium_net": 97695472.0,
+                "five_day_small_net": -37175104.0,
+                "five_day_main_net": -270516992.0
+              }
+            ],
+            "schema": [
+              {
+                "name": "instrument_id",
+                "type": "string"
+              },
+              {
+                "name": "trade_date",
+                "type": "string"
+              },
+              {
+                "name": "full_code",
+                "type": "string"
+              },
+              {
+                "name": "market",
+                "type": "integer"
+              },
+              {
+                "name": "today_main_in",
+                "type": "number"
+              },
+              {
+                "name": "today_main_out",
+                "type": "number"
+              },
+              {
+                "name": "today_retail_in",
+                "type": "number"
+              },
+              {
+                "name": "today_retail_out",
+                "type": "number"
+              },
+              {
+                "name": "today_main_net",
+                "type": "number"
+              },
+              {
+                "name": "today_retail_net",
+                "type": "number"
+              },
+              {
+                "name": "five_day_main_buy",
+                "type": "number"
+              },
+              {
+                "name": "five_day_main_sell",
+                "type": "number"
+              },
+              {
+                "name": "five_day_super_net",
+                "type": "number"
+              },
+              {
+                "name": "five_day_large_net",
+                "type": "number"
+              },
+              {
+                "name": "five_day_medium_net",
+                "type": "number"
+              },
+              {
+                "name": "five_day_small_net",
+                "type": "number"
+              },
+              {
+                "name": "five_day_main_net",
+                "type": "number"
+              }
+            ],
+            "meta": {
+              "count": 1
+            }
+          },
+          "request_time": null
+        }
+      ],
+      "limits": {},
+      "notes": "Scan the current TDX A-share stock universe on a quote connection, then fetch the server-computed capital-flow snapshot (MAC 0x1218) per stock on the MAC host group. main/retail and the super/large/medium/small order-size buckets are the vendor's own server-side split (a black box), not a universal definition. This is a current-day snapshot, not a historical table.",
+      "summary_zh": "扫描通达信全市场股票池，在 MAC 行情服务器逐只拉取当日/五日资金流快照。",
+      "description_zh": "这个接口先扫描全市场股票池，再逐只请求 MAC 0x1218 资金流快照；主力/散户与超大/大/中/小单口径均为通达信服务端黑箱定义；默认不写本地数据。",
+      "params_note_zh": "不传参数时，默认扫描全市场并返回当日资金流快照；trade_date 仅作为落表分区与文件名。",
+      "params_example_zh": "# 默认扫描全市场当前资金流\nclient.call(\"stock_capital_flow_tdx\")\n\n# 调试指定股票\nclient.call(\"stock_capital_flow_tdx\", code=[\"000001.SZ\", \"600000.SH\"])"
+    },
+    {
       "name": "stock_daily_share_tdx",
       "display_name_zh": "每日股本（盘前）",
       "source_code": "tdx",
@@ -22951,6 +23259,377 @@
       "summary_zh": "查询市场或行业排名明细。",
       "description_zh": "查询市场或行业排名明细。",
       "params_example_zh": "# 单个标的\nclient.call(\"stock_market_rankings_tdx\", code=\"000001.SZ\", scope=\"market\", count=5)\n\n# 批量请求多个标的\nclient.call(\"stock_market_rankings_tdx\", code=[\"000034.SZ\", \"000001.SZ\"], scope=\"market\", count=5)"
+    },
+    {
+      "name": "stock_theme_members_tdx",
+      "display_name_zh": "题材成分（PIT）",
+      "source_code": "tdx",
+      "source_name_zh": "通达信",
+      "category": "短线数据",
+      "menu_path": [
+        "通达信",
+        "股票数据",
+        "短线数据"
+      ],
+      "asset_class": "stock",
+      "request_mode": "source_request",
+      "collection": {
+        "supported": true,
+        "default_profile": "stock_theme_members_tdx.snapshot"
+      },
+      "parameters": [
+        {
+          "name": "category",
+          "display_name_zh": "题材分类位（topic_list 入口参数），默认 1",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": "1",
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "topic_list 入口的题材分类位；默认 1（真机抓包口径），与 setcode 拼成 category|setcode。"
+        },
+        {
+          "name": "setcode",
+          "display_name_zh": "市场位（topic_list 入口参数），默认 1",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": "1",
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "topic_list 入口的市场位；默认 1；成分行的真实市场位以行内 setcode/代码前缀为准。"
+        },
+        {
+          "name": "as_of_date",
+          "display_name_zh": "PIT 快照日 YYYYMMDD，默认当日，可用于补采",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "PIT 快照日 YYYYMMDD；默认当日，可显式传值用于补采；当日重跑幂等覆盖。"
+        }
+      ],
+      "fields": [
+        {
+          "name": "theme_code",
+          "display_name_zh": "题材代码（网关原始口径，如 880915/1317）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "题材代码。"
+        },
+        {
+          "name": "setcode",
+          "display_name_zh": "题材所在市场位：0 深、1 沪、2 北。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "题材市场位。"
+        },
+        {
+          "name": "instrument_id",
+          "display_name_zh": "AxData 统一证券代码，如 300243.SZ。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "成分证券统一代码。"
+        },
+        {
+          "name": "symbol",
+          "display_name_zh": "6 位证券代码，如 300243。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "成分证券原始代码。"
+        },
+        {
+          "name": "exchange",
+          "display_name_zh": "交易所代码：SZSE、SSE 或 BSE。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "成分证券交易所。"
+        },
+        {
+          "name": "instrument_name",
+          "display_name_zh": "成分证券名称。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "成分证券名称。"
+        },
+        {
+          "name": "join_reason",
+          "display_name_zh": "入选题材的理由文本（网关原文）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "入选理由。"
+        },
+        {
+          "name": "join_date",
+          "display_name_zh": "入选日期 YYYYMMDD。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "入选日期。"
+        },
+        {
+          "name": "as_of_date",
+          "display_name_zh": "PIT 快照日 YYYYMMDD（采集当日或补采指定日）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "快照日。"
+        }
+      ],
+      "examples": [
+        {
+          "title": "全量题材成分（PIT）",
+          "request": {
+            "interface_name": "stock_theme_members_tdx",
+            "params": {
+              "category": "",
+              "setcode": ""
+            }
+          },
+          "response": {
+            "data": [
+              {
+                "theme_code": "880915",
+                "setcode": "1",
+                "instrument_id": "300243.SZ",
+                "symbol": "300243",
+                "exchange": "SZSE",
+                "instrument_name": "初灵信息",
+                "join_reason": "昨日突涨",
+                "join_date": "20260815",
+                "as_of_date": "20260816"
+              }
+            ],
+            "schema": [
+              {
+                "name": "theme_code",
+                "type": "string"
+              },
+              {
+                "name": "setcode",
+                "type": "string"
+              },
+              {
+                "name": "instrument_id",
+                "type": "string"
+              },
+              {
+                "name": "symbol",
+                "type": "string"
+              },
+              {
+                "name": "exchange",
+                "type": "string"
+              },
+              {
+                "name": "instrument_name",
+                "type": "string"
+              },
+              {
+                "name": "join_reason",
+                "type": "string"
+              },
+              {
+                "name": "join_date",
+                "type": "string"
+              },
+              {
+                "name": "as_of_date",
+                "type": "string"
+              }
+            ],
+            "meta": {
+              "count": 1
+            }
+          },
+          "request_time": null
+        }
+      ],
+      "limits": {},
+      "notes": "Fetches the full TDX ICFQS topic list (paged until an empty page), then pages topic_stocks (size=100) for every theme. Rows keep join_date as the PIT membership timestamp and as_of_date as the snapshot day. The ICFQS gateway is HTTP and shares no connection with the TDX quote wire protocol.",
+      "summary_zh": "遍历通达信 ICFQS 全部题材并翻页拉取每个题材的成分股，构成按日留痕的 PIT 成分快照。",
+      "description_zh": "该接口经 ICFQS 题材族 HTTP 网关先翻页遍历全部题材，再对每个题材翻页拉取成分股；行内保留入选理由与入选日期，按 as_of_date 分区写入 core 层 theme_members 表，当日重跑幂等覆盖。",
+      "params_note_zh": "不传参数时按真机抓包口径 category=1、setcode=1 拉取全量题材；as_of_date 缺省为当日。",
+      "params_example_zh": "# 全量题材成分（PIT 快照）\nclient.call(\"stock_theme_members_tdx\")\n\n# 补采指定快照日\nclient.call(\"stock_theme_members_tdx\", as_of_date=\"20260816\")"
+    },
+    {
+      "name": "stock_theme_events_tdx",
+      "display_name_zh": "题材事件日历",
+      "source_code": "tdx",
+      "source_name_zh": "通达信",
+      "category": "短线数据",
+      "menu_path": [
+        "通达信",
+        "股票数据",
+        "短线数据"
+      ],
+      "asset_class": "stock",
+      "request_mode": "source_request",
+      "collection": {
+        "supported": true,
+        "default_profile": "stock_theme_events_tdx.snapshot"
+      },
+      "parameters": [
+        {
+          "name": "count",
+          "display_name_zh": "拉取近 N 条事件，默认 100，最大 1000",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 100,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "拉取近 N 条事件；默认 100，最大 1000。"
+        },
+        {
+          "name": "as_of_date",
+          "display_name_zh": "快照日 YYYYMMDD，默认当日，可用于补采",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "default": null,
+          "enum": [],
+          "control": null,
+          "placeholder": null,
+          "description": "快照日 YYYYMMDD；默认当日，可显式传值用于补采；当日重跑幂等覆盖。"
+        }
+      ],
+      "fields": [
+        {
+          "name": "theme_code",
+          "display_name_zh": "题材代码（网关原始口径）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "题材代码。"
+        },
+        {
+          "name": "theme_name",
+          "display_name_zh": "题材名称。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "题材名称。"
+        },
+        {
+          "name": "event_date",
+          "display_name_zh": "事件日期 YYYYMMDD。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "事件日期。"
+        },
+        {
+          "name": "event_text",
+          "display_name_zh": "事件文本（网关原文）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "事件内容。"
+        },
+        {
+          "name": "member_codes",
+          "display_name_zh": "成分代码原始串，如 0_300243,1_688598（市场位_代码）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "成分代码原始串。"
+        },
+        {
+          "name": "change_pct",
+          "display_name_zh": "事件日成分涨跌幅（网关口径，可为负）。",
+          "type": "number",
+          "required": false,
+          "unit": null,
+          "description": "涨跌幅。"
+        },
+        {
+          "name": "as_of_date",
+          "display_name_zh": "快照日 YYYYMMDD（采集当日或补采指定日）。",
+          "type": "string",
+          "required": false,
+          "unit": null,
+          "description": "快照日。"
+        }
+      ],
+      "examples": [
+        {
+          "title": "题材事件日历（近 100 条）",
+          "request": {
+            "interface_name": "stock_theme_events_tdx",
+            "params": {
+              "count": 100
+            }
+          },
+          "response": {
+            "data": [
+              {
+                "theme_code": "1317",
+                "theme_name": "世界杯概念",
+                "event_date": "20260615",
+                "event_text": "2026 美加墨世界杯开幕",
+                "member_codes": "0_300243,1_688598",
+                "change_pct": 3.45,
+                "as_of_date": "20260816"
+              }
+            ],
+            "schema": [
+              {
+                "name": "theme_code",
+                "type": "string"
+              },
+              {
+                "name": "theme_name",
+                "type": "string"
+              },
+              {
+                "name": "event_date",
+                "type": "string"
+              },
+              {
+                "name": "event_text",
+                "type": "string"
+              },
+              {
+                "name": "member_codes",
+                "type": "string"
+              },
+              {
+                "name": "change_pct",
+                "type": "number"
+              },
+              {
+                "name": "as_of_date",
+                "type": "string"
+              }
+            ],
+            "meta": {
+              "count": 1
+            }
+          },
+          "request_time": null
+        }
+      ],
+      "limits": {},
+      "notes": "Fetches the recent ICFQS theme event calendar (single request, default N=100, max 1000). member_codes keeps the gateway's raw market-prefixed string. The ICFQS gateway is HTTP and shares no connection with the TDX quote wire protocol.",
+      "summary_zh": "拉取通达信 ICFQS 题材事件日历（近 N 条），保留事件日期、事件文本与成分代码原始串。",
+      "description_zh": "该接口经 ICFQS 题材族 HTTP 网关拉取题材计划/纪念日历（events 近 N 条），按 as_of_date 分区写入 core 层 theme_events 表，当日重跑幂等覆盖。",
+      "params_note_zh": "不传参数时默认拉取近 100 条事件；as_of_date 缺省为当日。",
+      "params_example_zh": "# 近 100 条题材事件\nclient.call(\"stock_theme_events_tdx\")\n\n# 近 500 条\nclient.call(\"stock_theme_events_tdx\", count=500)"
     }
   ],
   "downloaders": [
@@ -23170,6 +23849,98 @@
           "float_share",
           "free_float_share_z"
         ],
+        "field_mappings": {}
+      }
+    },
+    {
+      "name": "stock_capital_flow_tdx.snapshot",
+      "interface_name": "stock_capital_flow_tdx",
+      "display_name_zh": "个股资金流",
+      "resource_group": "tdx.quote",
+      "mode": "snapshot",
+      "default_options": {
+        "params": {
+          "scope": "all"
+        },
+        "fields": [
+          "instrument_id",
+          "trade_date",
+          "full_code",
+          "market",
+          "today_main_in",
+          "today_main_out",
+          "today_retail_in",
+          "today_retail_out",
+          "today_main_net",
+          "today_retail_net",
+          "five_day_main_buy",
+          "five_day_main_sell",
+          "five_day_super_net",
+          "five_day_large_net",
+          "five_day_medium_net",
+          "five_day_small_net",
+          "five_day_main_net"
+        ],
+        "formats": [
+          "parquet"
+        ],
+        "connection_mode": "long_connection",
+        "source_server_count": 1,
+        "connections_per_server": 2,
+        "max_concurrent_tasks": 2,
+        "batch_size": 1,
+        "request_interval_ms": 0,
+        "retry_count": 0,
+        "timeout_ms": 30000
+      },
+      "default_limits": {
+        "max_active_jobs": 1,
+        "max_connections_total": 2,
+        "request_interval_ms": 0,
+        "max_retries": 0
+      },
+      "output": {
+        "default_dir_name": "stock_capital_flow_tdx",
+        "file_name_template": "{interface_name}_{data_date}_{run_time}",
+        "supported_formats": [
+          "parquet",
+          "csv",
+          "jsonl"
+        ],
+        "output_layer": "core",
+        "write_mode": "snapshot",
+        "primary_key": [
+          "instrument_id",
+          "trade_date"
+        ],
+        "partition_by": [
+          "trade_date"
+        ],
+        "required_columns": [
+          "instrument_id",
+          "trade_date"
+        ],
+        "expected_columns": [
+          "instrument_id",
+          "trade_date",
+          "full_code",
+          "market",
+          "today_main_in",
+          "today_main_out",
+          "today_retail_in",
+          "today_retail_out",
+          "today_main_net",
+          "today_retail_net",
+          "five_day_main_buy",
+          "five_day_main_sell",
+          "five_day_super_net",
+          "five_day_large_net",
+          "five_day_medium_net",
+          "five_day_small_net",
+          "five_day_main_net"
+        ],
+        "date_field": "trade_date",
+        "numeric_positive_columns": [],
         "field_mappings": {}
       }
     },
@@ -23836,6 +24607,173 @@
         "numeric_positive_columns": [
           "previous_close"
         ],
+        "field_mappings": {}
+      }
+    },
+    {
+      "name": "stock_theme_members_tdx.snapshot",
+      "interface_name": "stock_theme_members_tdx",
+      "display_name_zh": "题材成分（PIT）",
+      "resource_group": "tdx.f10",
+      "mode": "snapshot",
+      "default_options": {
+        "params": {
+          "category": "",
+          "setcode": ""
+        },
+        "fields": [
+          "theme_code",
+          "setcode",
+          "instrument_id",
+          "symbol",
+          "exchange",
+          "instrument_name",
+          "join_reason",
+          "join_date",
+          "as_of_date"
+        ],
+        "formats": [
+          "parquet"
+        ],
+        "connection_mode": "long_connection",
+        "source_server_count": 1,
+        "connections_per_server": 1,
+        "max_concurrent_tasks": 1,
+        "batch_size": 1,
+        "request_interval_ms": 0,
+        "retry_count": 0,
+        "timeout_ms": 30000
+      },
+      "default_limits": {
+        "max_active_jobs": 1,
+        "max_connections_total": 1,
+        "request_interval_ms": 0,
+        "max_retries": 0
+      },
+      "output": {
+        "default_dir_name": "stock_theme_members_tdx",
+        "file_name_template": "{interface_name}_{snapshot_date}",
+        "supported_formats": [
+          "parquet",
+          "csv",
+          "jsonl"
+        ],
+        "output_layer": "core",
+        "primary_key": [
+          "theme_code",
+          "setcode",
+          "instrument_id",
+          "as_of_date"
+        ],
+        "required_columns": [
+          "theme_code",
+          "setcode",
+          "instrument_id",
+          "as_of_date"
+        ],
+        "expected_columns": [
+          "theme_code",
+          "setcode",
+          "instrument_id",
+          "symbol",
+          "exchange",
+          "instrument_name",
+          "join_reason",
+          "join_date",
+          "as_of_date"
+        ],
+        "date_field": "as_of_date",
+        "write_mode": "snapshot",
+        "partition_by": [
+          "as_of_date"
+        ],
+        "snapshot_date_meta_keys": [
+          "as_of_date",
+          "data_date",
+          "trade_date",
+          "date"
+        ],
+        "numeric_positive_columns": [],
+        "field_mappings": {}
+      }
+    },
+    {
+      "name": "stock_theme_events_tdx.snapshot",
+      "interface_name": "stock_theme_events_tdx",
+      "display_name_zh": "题材事件日历",
+      "resource_group": "tdx.f10",
+      "mode": "snapshot",
+      "default_options": {
+        "params": {
+          "count": 100
+        },
+        "fields": [
+          "theme_code",
+          "theme_name",
+          "event_date",
+          "event_text",
+          "member_codes",
+          "change_pct",
+          "as_of_date"
+        ],
+        "formats": [
+          "parquet"
+        ],
+        "connection_mode": "long_connection",
+        "source_server_count": 1,
+        "connections_per_server": 1,
+        "max_concurrent_tasks": 1,
+        "batch_size": 1,
+        "request_interval_ms": 0,
+        "retry_count": 0,
+        "timeout_ms": 30000
+      },
+      "default_limits": {
+        "max_active_jobs": 1,
+        "max_connections_total": 1,
+        "request_interval_ms": 0,
+        "max_retries": 0
+      },
+      "output": {
+        "default_dir_name": "stock_theme_events_tdx",
+        "file_name_template": "{interface_name}_{snapshot_date}",
+        "supported_formats": [
+          "parquet",
+          "csv",
+          "jsonl"
+        ],
+        "output_layer": "core",
+        "primary_key": [
+          "theme_code",
+          "event_date",
+          "as_of_date"
+        ],
+        "required_columns": [
+          "theme_code",
+          "event_date",
+          "as_of_date"
+        ],
+        "expected_columns": [
+          "theme_code",
+          "theme_name",
+          "event_date",
+          "event_text",
+          "member_codes",
+          "change_pct",
+          "as_of_date"
+        ],
+        "date_field": "as_of_date",
+        "write_mode": "snapshot",
+        "partition_by": [
+          "as_of_date"
+        ],
+        "snapshot_date_meta_keys": [
+          "as_of_date",
+          "data_date",
+          "trade_date",
+          "date"
+        ],
+        "numeric_positive_columns": [],
         "field_mappings": {}
       }
     }

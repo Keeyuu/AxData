@@ -313,7 +313,8 @@ def test_plugin_check_external_tdx_provider_does_not_load_tdx_runtime() -> None:
         text=True,
     )
 
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in result.stdout
+    # 计划 19 P1 后 provider.json manifest 口径 93 接口 / 15 downloader
+    assert f"OK {TDX_PROVIDER_ID} interfaces=93 downloaders=15 collectors=0" in result.stdout
     assert "exit=0" in result.stdout
     assert "axdata_core.builtin_providers" not in result.stdout
     assert "axdata_source_tdx.catalog" in result.stdout
@@ -364,8 +365,9 @@ def test_plugin_build_external_tdx_provider_does_not_load_tdx_runtime(tmp_path) 
     assert "exit=0" in result.stdout
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["provider"]["provider_id"] == TDX_PROVIDER_ID
-    assert len(payload["interfaces"]) == 90
-    assert len(payload["downloaders"]) == 12
+    # 计划 19 P1 后 provider.json manifest 口径 93 接口 / 15 downloader
+    assert len(payload["interfaces"]) == 93
+    assert len(payload["downloaders"]) == 15
     assert payload["collectors"] == []
     assert "axdata_core.builtin_providers" not in result.stdout
     assert "axdata_source_tdx.catalog" in result.stdout
@@ -519,6 +521,7 @@ def test_plugin_list_shows_missing_tdx_providers_when_not_discovered(capsys, mon
     quote = providers[TDX_PROVIDER_ID]
     assert quote["status"] == "missing"
     assert quote["source_name_zh"] == "通达信"
+    # 该路径按 axdata_core sources catalog 口径计数（仍为 90），与 manifest（93）不同源。
     assert quote["interface_count"] == 90
     assert quote["install_source"] == "missing"
     assert quote["can_enable"] is False

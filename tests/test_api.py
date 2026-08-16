@@ -25,7 +25,9 @@ from tests.tdx_plugin_helpers import (
 
 ensure_local_tdx_plugin_paths()
 
-TDX_SOURCE_INTERFACE_COUNT = 90
+# 计划 19 P1 注册 capital_flow(+1) 与 theme_members/theme_events(+2) 后，
+# TDX provider.json manifest 口径为 93（axdata_core sources catalog 仍为 90）。
+TDX_SOURCE_INTERFACE_COUNT = 93
 TDX_EXT_SOURCE_INTERFACE_COUNT = 31
 EXPECTED_SOURCE_REQUEST_INTERFACE_COUNT = (
     len(list_builtin_request_interfaces())
@@ -45,6 +47,8 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_suspensions_tdx",
     "stock_st_list_tdx",
     "stock_daily_share_tdx",
+    # 计划 19 P1：MAC 资金流采集接口
+    "stock_capital_flow_tdx",
     "stock_capital_changes_tdx",
     "stock_kline_daily_tdx",
     "stock_kline_minute_tdx",
@@ -53,6 +57,9 @@ TDX_DOWNLOADER_INTERFACE_NAMES = [
     "stock_adj_factor_tdx",
     "stock_limit_ladder_tdx",
     "stock_theme_strength_rank_tdx",
+    # 计划 19 P1：ICFQS 题材族两个采集接口
+    "stock_theme_members_tdx",
+    "stock_theme_events_tdx",
 ]
 BUILTIN_GENERIC_INTERFACE_NAMES = {
     "stock_trade_calendar_exchange",
@@ -995,6 +1002,8 @@ def test_plugin_provider_status_catalog_shows_missing_tdx_providers(monkeypatch,
     providers = {item["provider_id"]: item for item in response.json()["data"]}
     assert providers[TDX_PROVIDER_ID]["status"] == "missing"
     assert providers[TDX_PROVIDER_ID]["source_name_zh"] == "通达信"
+    # 该端点按 axdata_core sources catalog 口径计数（仍为 90），与
+    # provider.json manifest（93）不同源。
     assert providers[TDX_PROVIDER_ID]["interface_count"] == 90
     assert "普通 TDX 接口不会出现在运行目录" in providers[TDX_PROVIDER_ID]["status_message"]
     assert providers[TDX_EXT_PROVIDER_ID]["status"] == "missing"
@@ -2235,104 +2244,140 @@ def test_downloaders_catalog_lists_stock_suspensions_and_st_tdx():
     assert payload["data"][3]["concurrency"]["default_batch_size"] == 80
     assert payload["data"][3]["primary_key"] == ["trade_date", "instrument_id"]
     assert payload["data"][3]["params"][1] == ["code", "string/list", "否", "证券代码：可选；不填则按股票范围拉取全量"]
+    # 计划 19 P1：[4] 起插入 capital_flow，原 [4..11] 顺移 +1；theme×2 追加在末尾
+    assert payload["data"][4]["interface_name"] == "stock_capital_flow_tdx"
     assert payload["data"][4]["downloader_type"] == "full_snapshot"
     assert payload["data"][4]["default_params"] == {"scope": "all"}
-    assert payload["data"][4]["default_connection_count"] == 16
-    assert payload["data"][4]["connection_count_editable"] is False
-    assert payload["data"][4]["max_connection_count"] == 16
-    assert payload["data"][4]["concurrency"]["mode"] == "fixed"
-    assert payload["data"][4]["concurrency"]["default_source_server_count"] == 8
-    assert payload["data"][4]["concurrency"]["default_connections_per_server"] == 2
-    assert payload["data"][4]["concurrency"]["default_max_concurrent_tasks"] == 16
-    assert payload["data"][4]["concurrency"]["default_batch_size"] == 1
-    assert payload["data"][4]["primary_key"] == ["instrument_id", "record_hex"]
-    assert [row[0] for row in payload["data"][4]["params"]] == ["scope", "code", "category"]
-    assert payload["data"][5]["interface_name"] == "stock_kline_daily_tdx"
-    assert payload["data"][5]["downloader_type"] == "history"
-    assert payload["data"][5]["default_params"] == {"code": "000001.SZ", "count": 800, "adjust": "none"}
-    assert payload["data"][5]["default_connection_count"] == 1
+    assert payload["data"][4]["default_connection_count"] == 2
+    assert payload["data"][4]["primary_key"] == ["instrument_id", "trade_date"]
+    assert payload["data"][4]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][4]["params"]] == ["scope", "code", "trade_date"]
+    assert payload["data"][5]["downloader_type"] == "full_snapshot"
+    assert payload["data"][5]["default_params"] == {"scope": "all"}
+    assert payload["data"][5]["default_connection_count"] == 16
     assert payload["data"][5]["connection_count_editable"] is False
-    assert payload["data"][5]["max_connection_count"] == 1
-    assert payload["data"][5]["primary_key"] == ["instrument_id", "trade_time", "period"]
-    assert payload["data"][5]["output_layer"] == "core"
-    assert [row[0] for row in payload["data"][5]["params"]] == ["code", "count", "adjust", "anchor_date"]
-    assert payload["data"][6]["interface_name"] == "stock_kline_minute_tdx"
+    assert payload["data"][5]["max_connection_count"] == 16
+    assert payload["data"][5]["concurrency"]["mode"] == "fixed"
+    assert payload["data"][5]["concurrency"]["default_source_server_count"] == 8
+    assert payload["data"][5]["concurrency"]["default_connections_per_server"] == 2
+    assert payload["data"][5]["concurrency"]["default_max_concurrent_tasks"] == 16
+    assert payload["data"][5]["concurrency"]["default_batch_size"] == 1
+    assert payload["data"][5]["primary_key"] == ["instrument_id", "record_hex"]
+    assert [row[0] for row in payload["data"][5]["params"]] == ["scope", "code", "category"]
+    assert payload["data"][6]["interface_name"] == "stock_kline_daily_tdx"
     assert payload["data"][6]["downloader_type"] == "history"
-    assert payload["data"][6]["default_params"] == {
+    assert payload["data"][6]["default_params"] == {"code": "000001.SZ", "count": 800, "adjust": "none"}
+    assert payload["data"][6]["default_connection_count"] == 1
+    assert payload["data"][6]["connection_count_editable"] is False
+    assert payload["data"][6]["max_connection_count"] == 1
+    assert payload["data"][6]["primary_key"] == ["instrument_id", "trade_time", "period"]
+    assert payload["data"][6]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][6]["params"]] == ["code", "count", "adjust", "anchor_date"]
+    assert payload["data"][7]["interface_name"] == "stock_kline_minute_tdx"
+    assert payload["data"][7]["downloader_type"] == "history"
+    assert payload["data"][7]["default_params"] == {
         "code": "000001.SZ",
         "period": "1m",
         "adjust": "none",
     }
-    assert payload["data"][6]["default_connection_count"] == 1
-    assert payload["data"][6]["max_connection_count"] == 1
-    assert payload["data"][6]["primary_key"] == [
+    assert payload["data"][7]["default_connection_count"] == 1
+    assert payload["data"][7]["max_connection_count"] == 1
+    assert payload["data"][7]["primary_key"] == [
         "instrument_id",
         "trade_time",
         "period",
     ]
-    assert payload["data"][6]["output_layer"] == "core"
-    assert [row[0] for row in payload["data"][6]["params"]] == [
+    assert payload["data"][7]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][7]["params"]] == [
         "code",
         "period",
         "adjust",
         "anchor_date",
     ]
-    assert payload["data"][7]["interface_name"] == "index_kline_tdx"
-    assert payload["data"][7]["downloader_type"] == "history"
-    assert payload["data"][7]["default_params"] == {
+    assert payload["data"][8]["interface_name"] == "index_kline_tdx"
+    assert payload["data"][8]["downloader_type"] == "history"
+    assert payload["data"][8]["default_params"] == {
         "code": "sh000001",
         "period": "day",
         "full_history": True,
     }
-    assert payload["data"][7]["output_layer"] == "core"
-    assert payload["data"][7]["primary_key"] == ["instrument_id", "trade_time"]
-    assert [row[0] for row in payload["data"][7]["params"]] == [
+    assert payload["data"][8]["output_layer"] == "core"
+    assert payload["data"][8]["primary_key"] == ["instrument_id", "trade_time"]
+    assert [row[0] for row in payload["data"][8]["params"]] == [
         "code",
         "period",
         "count",
         "full_history",
     ]
-    assert payload["data"][8]["interface_name"] == "index_codes_tdx"
-    assert payload["data"][8]["downloader_type"] == "full_snapshot"
-    assert payload["data"][8]["default_params"] == {"include_tdx_block_index": True}
-    assert payload["data"][8]["output_layer"] == "snapshot"
-    assert payload["data"][8]["primary_key"] == "instrument_id"
-    assert payload["data"][9]["interface_name"] == "stock_adj_factor_tdx"
-    assert payload["data"][9]["downloader_type"] == "history"
-    assert payload["data"][9]["default_params"] == {"code": "000001.SZ", "adjust": "qfq"}
-    assert payload["data"][9]["default_connection_count"] == 1
-    assert payload["data"][9]["connection_count_editable"] is False
-    assert payload["data"][9]["max_connection_count"] == 1
-    assert payload["data"][9]["primary_key"] == ["ts_code", "trade_date"]
-    assert payload["data"][9]["output_layer"] == "core"
-    assert [row[0] for row in payload["data"][9]["params"]] == ["code", "adjust", "anchor_date"]
-    assert payload["data"][10]["interface_name"] == "stock_limit_ladder_tdx"
-    assert payload["data"][10]["downloader_type"] == "full_snapshot"
-    assert payload["data"][10]["default_params"] == {
+    assert payload["data"][9]["interface_name"] == "index_codes_tdx"
+    assert payload["data"][9]["downloader_type"] == "full_snapshot"
+    assert payload["data"][9]["default_params"] == {"include_tdx_block_index": True}
+    assert payload["data"][9]["output_layer"] == "snapshot"
+    assert payload["data"][9]["primary_key"] == "instrument_id"
+    assert payload["data"][10]["interface_name"] == "stock_adj_factor_tdx"
+    assert payload["data"][10]["downloader_type"] == "history"
+    assert payload["data"][10]["default_params"] == {"code": "000001.SZ", "adjust": "qfq"}
+    assert payload["data"][10]["default_connection_count"] == 1
+    assert payload["data"][10]["connection_count_editable"] is False
+    assert payload["data"][10]["max_connection_count"] == 1
+    assert payload["data"][10]["primary_key"] == ["ts_code", "trade_date"]
+    assert payload["data"][10]["output_layer"] == "core"
+    assert [row[0] for row in payload["data"][10]["params"]] == ["code", "adjust", "anchor_date"]
+    assert payload["data"][11]["interface_name"] == "stock_limit_ladder_tdx"
+    assert payload["data"][11]["downloader_type"] == "full_snapshot"
+    assert payload["data"][11]["default_params"] == {
         "count": "all",
         "scope": "main",
         "include_touched": False,
         "topic_type": "theme",
     }
-    assert payload["data"][10]["default_connection_count"] == 1
-    assert payload["data"][10]["connection_count_editable"] is False
-    assert payload["data"][10]["max_connection_count"] == 1
-    assert payload["data"][10]["primary_key"] == ["trade_date", "ladder_level", "instrument_id"]
-    assert [row[0] for row in payload["data"][10]["params"]] == [
+    assert payload["data"][11]["default_connection_count"] == 1
+    assert payload["data"][11]["connection_count_editable"] is False
+    assert payload["data"][11]["max_connection_count"] == 1
+    assert payload["data"][11]["primary_key"] == ["trade_date", "ladder_level", "instrument_id"]
+    assert [row[0] for row in payload["data"][11]["params"]] == [
         "count",
         "scope",
         "include_touched",
         "topic_type",
     ]
-    assert payload["data"][11]["interface_name"] == "stock_theme_strength_rank_tdx"
-    assert payload["data"][11]["downloader_type"] == "full_snapshot"
-    assert payload["data"][11]["default_params"] == {
+    assert payload["data"][12]["interface_name"] == "stock_theme_strength_rank_tdx"
+    assert payload["data"][12]["downloader_type"] == "full_snapshot"
+    assert payload["data"][12]["default_params"] == {
         "count": "all",
         "scope": "main",
         "topic_type": "theme",
     }
-    assert payload["data"][11]["primary_key"] == ["trade_date", "topic_type", "topic_name"]
-    assert [row[0] for row in payload["data"][11]["params"]] == ["count", "scope", "topic_type"]
+    assert payload["data"][12]["primary_key"] == ["trade_date", "topic_type", "topic_name"]
+    assert [row[0] for row in payload["data"][12]["params"]] == ["count", "scope", "topic_type"]
+    # 计划 19 P1：ICFQS 题材族（core 层、按 as_of_date 分区、确定性 stem）
+    assert payload["data"][13]["interface_name"] == "stock_theme_members_tdx"
+    assert payload["data"][13]["downloader_type"] == "full_snapshot"
+    assert payload["data"][13]["default_params"] == {"category": "", "setcode": ""}
+    assert payload["data"][13]["default_connection_count"] == 1
+    assert payload["data"][13]["output_layer"] == "core"
+    assert payload["data"][13]["write_mode"] == "snapshot"
+    assert payload["data"][13]["partition_by"] == ["as_of_date"]
+    assert payload["data"][13]["primary_key"] == [
+        "theme_code",
+        "setcode",
+        "instrument_id",
+        "as_of_date",
+    ]
+    assert [row[0] for row in payload["data"][13]["params"]] == [
+        "category",
+        "setcode",
+        "as_of_date",
+    ]
+    assert payload["data"][14]["interface_name"] == "stock_theme_events_tdx"
+    assert payload["data"][14]["downloader_type"] == "full_snapshot"
+    assert payload["data"][14]["default_params"] == {"count": 100}
+    assert payload["data"][14]["default_connection_count"] == 1
+    assert payload["data"][14]["output_layer"] == "core"
+    assert payload["data"][14]["write_mode"] == "snapshot"
+    assert payload["data"][14]["partition_by"] == ["as_of_date"]
+    assert payload["data"][14]["primary_key"] == ["theme_code", "event_date", "as_of_date"]
+    assert [row[0] for row in payload["data"][14]["params"]] == ["count", "as_of_date"]
     historical_list = {item["interface_name"]: item for item in payload["data"]}["stock_historical_list_exchange"]
     assert historical_list["provider_id"] == "axdata.source.exchange"
     assert historical_list["manifest_downloader_name"] == "stock_historical_list_exchange.snapshot"

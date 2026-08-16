@@ -256,6 +256,20 @@ class TdxRequestAdapter:
 
         return request_methods.request_stock_theme_strength_rank(self, client, params)
 
+    def _request_stock_theme_members(
+        self, client: Any, params: Mapping[str, Any]
+    ) -> list[dict[str, Any]]:
+        from . import request_methods
+
+        return request_methods.request_stock_theme_members(self, client, params)
+
+    def _request_stock_theme_events(
+        self, client: Any, params: Mapping[str, Any]
+    ) -> list[dict[str, Any]]:
+        from . import request_methods
+
+        return request_methods.request_stock_theme_events(self, client, params)
+
     def _topic_rows_by_instrument_id(
         self,
         instrument_ids: Sequence[str],
@@ -273,6 +287,15 @@ class TdxRequestAdapter:
             progress_start=progress_start,
             progress_span=progress_span,
         )
+
+    def _request_stock_capital_flow(
+        self,
+        client: Any,
+        params: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        from . import request_methods
+
+        return request_methods.request_stock_capital_flow(self, client, params)
 
     def _request_stock_capital_changes(self, client: Any, params: Mapping[str, Any]) -> list[dict[str, Any]]:
         from . import request_methods

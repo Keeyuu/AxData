@@ -47,5 +47,21 @@ def configured_tdx_hosts_from_options(
     return list(fallback_hosts)
 
 
+DEFAULT_TDX_MAC_HOSTS: tuple[str, ...] = (
+    "121.36.248.138:7709",
+    "123.60.47.136:7709",
+    "121.37.207.165:7709",
+)
+"""Built-in MAC capital-flow (0x1218) hosts captured live (plan 19 §5)."""
+
+TDX_MAC_HOSTS_ENV = "AXDATA_TDX_MAC_HOSTS"
+
+
+def configured_tdx_mac_hosts() -> list[str]:
+    """Return configured MAC capital-flow hosts; env override wins (comma separated)."""
+
+    return env_hosts(TDX_MAC_HOSTS_ENV) or list(DEFAULT_TDX_MAC_HOSTS)
+
+
 def suspension_scan_hosts(hosts: Sequence[str], *, host_count: int) -> list[str]:
     return list(hosts[:host_count])

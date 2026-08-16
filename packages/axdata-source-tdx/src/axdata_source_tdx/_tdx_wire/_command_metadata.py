@@ -27,6 +27,7 @@ COMMAND_METADATA_ITEMS: tuple[tuple[str, str, str, bool, str], ...] = (
         False,
         "0x0feb-近期历史分时图接口.md",
     ),
+    ("mac_capital_flow", "mac", "capital_flow", False, "0x1218-MAC资金流向接口.md"),
 )
 
 __all__ = ["COMMAND_METADATA_ITEMS"]

@@ -11,7 +11,7 @@ from tests.tdx_plugin_helpers import build_registry_with_local_tdx_plugins, ensu
 
 ensure_local_tdx_plugin_paths()
 
-TDX_SOURCE_INTERFACE_COUNT = 90
+TDX_SOURCE_INTERFACE_COUNT = 93
 TDX_EXT_SOURCE_INTERFACE_COUNT = 31
 
 

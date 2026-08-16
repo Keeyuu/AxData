@@ -195,8 +195,8 @@ def test_tdx_provider_catalog_projection_does_not_load_downloader_runtime() -> N
     )
     result = _core_without_site_subprocess(code)
 
-    assert "interfaces=90" in result.stdout
-    assert "profiles=12" in result.stdout
+    assert "interfaces=93" in result.stdout
+    assert "profiles=15" in result.stdout
     assert "collectors=0" in result.stdout
     assert "axdata_core.sources.tdx.catalog" not in result.stdout
     assert "axdata_core.tdx_f10_catalog" not in result.stdout
@@ -1221,16 +1221,16 @@ def test_tdx_provider_wire_command_codec_uses_lightweight_dispatch_facts() -> No
     assert "core_wire=False" in result.stdout
     assert "codec_builders_cached=False" in result.stdout
     assert "codec_parsers_cached=False" in result.stdout
-    assert "builder_count=20" in result.stdout
-    assert "parser_count=20" in result.stdout
+    assert "builder_count=21" in result.stdout
+    assert "parser_count=21" in result.stdout
     assert "command_codes_after_tables=True" in result.stdout
     assert "command_dispatch_after_tables=True" in result.stdout
     assert "command_codes_export_cached_after_tables=False" in result.stdout
     assert "builder_targets_export_cached_after_tables=False" in result.stdout
     assert "parser_targets_export_cached_after_tables=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
-    assert "explicit_builder_targets=20" in result.stdout
-    assert "explicit_parser_targets=20" in result.stdout
+    assert "explicit_builder_targets=21" in result.stdout
+    assert "explicit_parser_targets=21" in result.stdout
 
 
 def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> None:
@@ -1278,8 +1278,8 @@ def test_tdx_provider_wire_command_codec_compat_path_routes_to_root_codec() -> N
     assert "core_wire=False" in result.stdout
     assert "codec_builders_cached=False" in result.stdout
     assert "codec_parsers_cached=False" in result.stdout
-    assert "builder_count=20" in result.stdout
-    assert "parser_count=20" in result.stdout
+    assert "builder_count=21" in result.stdout
+    assert "parser_count=21" in result.stdout
     assert "provider_command_codes_export_cached_after_tables=False" in result.stdout
     assert "provider_builder_targets_export_cached_after_tables=False" in result.stdout
     assert "provider_parser_targets_export_cached_after_tables=False" in result.stdout
@@ -2341,7 +2341,7 @@ def test_tdx_provider_wire_command_registry_root_import_is_lightweight() -> None
     assert "required_before_commands=heartbeat,handshake,security_list,security_count" in result.stdout
     assert "has_commands_after_required=False" in result.stdout
     assert "root_lookup_after_required=False" in result.stdout
-    assert "command_count=20" in result.stdout
+    assert "command_count=21" in result.stdout
     assert "command_codes_export_cached_after_commands=False" in result.stdout
     assert "explicit_legacy_quotes=0x53e" in result.stdout
     assert "command_codes_export_cached_after_explicit=True" in result.stdout
@@ -2409,7 +2409,7 @@ def test_tdx_provider_wire_command_registry_compat_import_is_lazy() -> None:
     assert "command_code=0x53e" in result.stdout
     assert "command_codes_after_call=True" in result.stdout
     assert "metadata_after_call=False" in result.stdout
-    assert "command_count=20" in result.stdout
+    assert "command_count=21" in result.stdout
     assert "metadata_after_commands=True" in result.stdout
     assert "codec_after_commands=False" in result.stdout
     assert "core_wire=False" in result.stdout
@@ -2445,7 +2445,7 @@ def test_tdx_provider_wire_command_aggregates_use_root_registry() -> None:
     )
 
     assert "same=True" in result.stdout
-    assert "command_count=20" in result.stdout
+    assert "command_count=21" in result.stdout
     assert "registry_root=True" in result.stdout
     assert "legacy_registry=False" in result.stdout
     assert "commands_package=True" in result.stdout
@@ -5916,6 +5916,8 @@ def test_tdx_public_runtime_modules_are_provider_owned_or_compat_only() -> None:
         "adapter.py",
         "catalog.py",
         "collectors.py",
+        # 计划 19 P1：ICFQS 题材族 fetch 模块（theme_members/theme_events）
+        "icfqs_theme_fetch.py",
         "market_dates.py",
         "metadata.py",
         "provider.py",
@@ -6139,7 +6141,8 @@ def test_tdx_provider_package_manifest_matches_provider(monkeypatch, tmp_path, c
         )
         == 0
     )
-    assert f"OK {TDX_PROVIDER_ID} interfaces=90 downloaders=12 collectors=0" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert f"OK {TDX_PROVIDER_ID} interfaces=93 downloaders=15 collectors=0" in output
     assert "axdata_source_tdx.provider" in sys.modules
     assert "axdata_source_tdx.adapter" not in sys.modules
 
@@ -6726,12 +6729,16 @@ def test_tdx_provider_package_builds_wheel_with_manifest_and_entry_point(built_w
         "stock_suspensions_tdx",
         "stock_st_list_tdx",
         "stock_daily_share_tdx",
+        "stock_capital_flow_tdx",
         "stock_capital_changes_tdx",
         "stock_kline_daily_tdx",
         "stock_kline_minute_tdx",
         "stock_adj_factor_tdx",
         "stock_limit_ladder_tdx",
         "stock_theme_strength_rank_tdx",
+        # 计划 19 P1：ICFQS 题材族两个采集接口（计数断言 90→93 / 12→15 随注册数更新）
+        "stock_theme_members_tdx",
+        "stock_theme_events_tdx",
         "index_kline_tdx",
         "index_codes_tdx",
     }

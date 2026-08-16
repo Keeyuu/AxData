@@ -22,6 +22,7 @@ _COMMAND_EXPORTS = {
     "TYPE_INTRADAY_SUBCHART": "intraday_subchart",
     "TYPE_KLINES": "klines",
     "TYPE_LEGACY_QUOTES": "legacy_quotes",
+    "TYPE_MAC_CAPITAL_FLOW": "mac_capital_flow",
     "TYPE_PRICE_LIMITS": "price_limits",
     "TYPE_RECENT_HISTORICAL_INTRADAY": "recent_historical_intraday",
     "TYPE_REFRESH_QUOTES": "refresh_quotes",

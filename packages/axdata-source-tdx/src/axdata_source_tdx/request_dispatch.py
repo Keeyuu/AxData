@@ -15,6 +15,13 @@ TDX_REALTIME_SNAPSHOT_INTERFACES = frozenset(
     }
 )
 
+# ICFQS HTTP 题材族接口：走 tqlex.IcfqsClient，不需要 TDX 行情 wire client，
+# 在 dispatch_adapter_request 里于创建 wire client 之前直接路由（client=None）。
+TDX_ICFQS_INTERFACES: dict[str, str] = {
+    "stock_theme_members_tdx": "_request_stock_theme_members",
+    "stock_theme_events_tdx": "_request_stock_theme_events",
+}
+
 TDX_EXACT_REQUEST_METHODS: dict[str, str] = {
     "index_codes_tdx": "_request_index_codes",
     "stock_st_list_tdx": "_request_stock_st_list",
@@ -33,6 +40,7 @@ TDX_EXACT_REQUEST_METHODS: dict[str, str] = {
     "stock_auction_result_history_tdx": "_request_stock_auction_result_history",
     "stock_shortline_indicators_tdx": "_request_stock_auction_indicators",
     "stock_capital_changes_tdx": "_request_stock_capital_changes",
+    "stock_capital_flow_tdx": "_request_stock_capital_flow",
     "stock_adj_factor_tdx": "_request_stock_adj_factor",
     "stock_intraday_today_tdx": "_request_stock_intraday_today",
     "stock_intraday_history_tdx": "_request_stock_intraday_history",
@@ -80,6 +88,10 @@ def dispatch_adapter_request(
 
     if interface_name in f10_interfaces:
         return adapter._request_stock_f10(interface_name, params)
+
+    icfqs_method = TDX_ICFQS_INTERFACES.get(interface_name)
+    if icfqs_method:
+        return getattr(adapter, icfqs_method)(None, params)
 
     if interface_name in kline_interface_specs and existing_client is None:
         kline_codes = requested_kline_codes(params.get("code"))
