@@ -17,7 +17,7 @@
   <a href="https://pypi.org/project/axdata/"><img alt="PyPI axdata" src="https://img.shields.io/pypi/v/axdata?label=PyPI&color=0969da"></a>
   <a href="https://electkismet.github.io/AxData/"><img alt="文档站" src="https://img.shields.io/badge/文档站-接口文档-0969da"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
-  <a href="./LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/协议-Apache--2.0-blue"></a>
+  <a href="./LICENSE"><img alt="Research-Only" src="https://img.shields.io/badge/协议-Research--Only-6f42c1"></a>
 </p>
 
 ![AxData 界面预览](docs/assets/axdata-readme-banner.png)
@@ -51,7 +51,7 @@
 
 **完整使用边界**
 
-1. 本项目代码按 Apache-2.0 协议开源，主要面向个人学习、技术研究和本地数据管理场景。
+1. 本项目代码按 AxData Research-Only License 提供，主要面向个人学习、协议研究和非商业研究场景。
 2. 本项目仅是一个开源量化数据库框架，其中数据接口部分基于互联网公开信息搜集、整理和适配。
 3. 本项目不提供任何商业数据服务，也不对任何第三方数据的商业使用作出授权。通过本项目访问或获取第三方数据的，用户需自行确认并遵守对应网站、数据源、开源项目或服务协议；因商业使用、付费服务、生产服务、转售或其他用途产生的风险与责任由使用者自行承担。
 4. 对第三方服务器或服务的访问，用户需自行遵守相关法律法规、数据源条款及服务协议。
