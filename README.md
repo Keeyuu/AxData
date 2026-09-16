@@ -319,4 +319,4 @@ npm run build:web
 
 ## 交流
 
-- QQ 群：[点击链接加入群聊](https://qm.qq.com/q/zAjpZsvfzy)
+- 交流群：[点击链接加入群聊](https://qm.qq.com/q/zAjpZsvfzy)
